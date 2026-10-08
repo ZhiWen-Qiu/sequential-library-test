@@ -294,6 +294,18 @@ class SequentialPlaneSearch {
     return this.plane;
   }
 
+  // Learn from 喜歡 / 不喜歡 marks without a favourite (喜歡 > unmarked > 不喜歡), then let BO point
+  // the next plane around `current` with the same `reach`.
+  refine(current, opts, reach) {
+    const liked = (opts.liked || []).map(clampVec);
+    const disliked = (opts.disliked || []).map(clampVec);
+    const neutral = (opts.neutral || []).map(clampVec);
+    for (const l of liked) this.model.addPreference(l, [...neutral, ...disliked]);
+    if (disliked.length) for (const n of neutral) this.model.addPreference(n, disliked);
+    this.plane = this.nextPlane(clampVec(current), reach);
+    return this.plane;
+  }
+
   // Everything needed to go back to this exact state later (for "undo").
   snapshot() {
     const copyPlane = p => ({ c: Float64Array.from(p.c), u: Float64Array.from(p.u), v: Float64Array.from(p.v) });

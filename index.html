@@ -363,7 +363,6 @@
           <div class="row actions-row">
             <button id="confirm" type="button" class="pick" disabled>確認這張</button>
             <button id="dislike" type="button">都不喜歡</button>
-            <button id="undo" type="button" disabled>上一步</button>
             <select id="gridSize" aria-label="格子數量">
               <option value="5">5×5</option>
               <option value="3">3×3</option>
@@ -745,8 +744,6 @@ function updateGalleryUI() {
   $("confirm").disabled = busy || g.picked === null;
   $("dislike").disabled = busy;
   $("restart").disabled = busy;
-  const node = state.tree && state.tree.nodes[state.tree.current];
-  $("undo").disabled = busy || !node || node.parent === null;
 }
 
 // ---------- history tree ----------
@@ -773,10 +770,10 @@ function resetTree() {
   renderTree();
 }
 
-function addNode(kind) {
+function addNode(kind, extra = {}) {
   const t = state.tree;
   const step = t.nodes[t.current].step + (kind === "confirm" ? 1 : 0);
-  t.nodes.push({ id: t.nodes.length, parent: t.current, kind, step, snap: snapGallery() });
+  t.nodes.push({ id: t.nodes.length, parent: t.current, kind, step, snap: snapGallery(), ...extra });
   t.current = t.nodes.length - 1;
   renderTree();
 }
@@ -785,8 +782,8 @@ function addNode(kind) {
 function refreshLevel() {
   const t = state.tree;
   let k = 1, n = t.nodes[t.current];
-  while (n.kind === "refresh") { k++; n = t.nodes[n.parent]; }
-  k += t.nodes.filter(m => m.parent === t.current && m.kind === "refresh").length;
+  while (n.kind === "refresh" && !n.guided) { k++; n = t.nodes[n.parent]; }
+  k += t.nodes.filter(m => m.parent === t.current && m.kind === "refresh" && !m.guided).length;
   return k;
 }
 
@@ -795,6 +792,25 @@ function refreshLevel() {
 function refreshGallery() {
   const g = state.gallery;
   if (!g || !state.tree || g.busy) return;
+  // with 喜歡 / 不喜歡 marks on this page: learn them and let them steer the new page, same reach
+  const liked = g.cells.filter(c => c.mark === "like").map(c => c.x);
+  const disliked = g.cells.filter(c => c.mark === "no").map(c => c.x);
+  if (liked.length || disliked.length) {
+    const n = g.n, corners = [0, n - 1, n * (n - 1), n * n - 1, (n * n - 1) / 2].map(i => g.cells[i]);
+    const neutral = corners.filter(c => !c.mark).map(c => c.x);
+    g.busy = true;
+    $("grid").classList.add("thinking");
+    updateGalleryUI();
+    setTimeout(() => {
+      g.sps.refine(toX(state.current), { liked, disliked, neutral }, g.reach);
+      g.busy = false;
+      $("grid").classList.remove("thinking");
+      g.chosenX = Float64Array.from(g.sps.plane.c);
+      buildGrid();
+      addNode("refresh", { guided: true });
+    }, 20);
+    return;
+  }
   const spread = Math.min(0.9, g.reach + 0.12 * (refreshLevel() - 1));
   g.sps.reseed(toX(state.current), spread);
   g.reach = spread;
@@ -829,10 +845,6 @@ function goToNode(id) {
   renderTree();
 }
 
-function undo() {
-  const node = state.tree && state.tree.nodes[state.tree.current];
-  if (node && node.parent !== null) goToNode(node.parent);
-}
 
 const NODE = 30, NODE_GAP_X = 18, NODE_GAP_Y = 12;
 
@@ -1597,7 +1609,6 @@ $("cropBox").addEventListener("pointercancel", onCropPointerUp);
 $("tabGallery").addEventListener("click", () => showTab("gallery"));
 $("tabSliders").addEventListener("click", () => showTab("sliders"));
 $("confirm").addEventListener("click", confirmPick);
-$("undo").addEventListener("click", undo);
 $("restart").addEventListener("click", refreshGallery);
 $("dislike").addEventListener("click", dislikeAll);
 $("gridSize").addEventListener("change", () => { if (state.gallery) buildGrid(); });
