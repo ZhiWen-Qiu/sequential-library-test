@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Sequential Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600&display=swap">
+<style>
+  /* Layout: neutral-grey viewing well for the photo, then the gallery and the sliders.
+     Wide: three columns side by side. Medium: photo on top, gallery + sliders below. Phone: photo, then tabs. */
+  :root {
+    --bg: #e8e9eb;
+    --surface: #f6f6f7;
+    --well: #8b8d90;        /* mid grey surround, so colors are judged against neutral */
+    --fg: #1c1e21;
+    --muted: #5b6068;
+    --line: #cfd2d6;
+    --accent: #2c66c9;      /* confirmed choice */
+    --pick: #d27f00;        /* previewed, not yet confirmed */
+    --danger: #b3261e;
+    --on-well: #f3f4f5;
+    --font-display: "Noto Serif TC", "Songti TC", serif;
+    --font-body: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1c1e; --surface: #25272a; --well: #3b3d40; --fg: #e9eaec; --muted: #a2a7ae;
+      --line: #3a3e43; --accent: #78a3ff; --pick: #ffb43d; --danger: #ff8a80; --on-well: #e9eaec; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b1c1e; --surface: #25272a; --well: #3b3d40; --fg: #e9eaec; --muted: #a2a7ae;
+    --line: #3a3e43; --accent: #78a3ff; --pick: #ffb43d; --danger: #ff8a80; --on-well: #e9eaec; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.55; }
+  .wrap { max-width: 1600px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 32px; display: flex; flex-direction: column; gap: 14px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; margin: 0; letter-spacing: 0.02em; }
+
+  button {
+    font: inherit; font-weight: 500; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+    padding: 7px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, input[type=range]:focus-visible, .dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  button.pick { background: var(--pick); border-color: var(--pick); color: #1c1e21; }
+  button.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+
+  .main { display: grid; gap: 16px; align-items: start; grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "tabs" "gallery" "sliders"; }
+  .stage { grid-area: stage; }
+  .tabs { grid-area: tabs; }
+  #galleryCard { grid-area: gallery; }
+  #slidersCard { grid-area: sliders; }
+  /* before a photo is chosen there is nothing to pick from: no gallery, no tabs */
+  body.no-photo .tabs, body.no-photo #galleryCard { display: none !important; }
+  @media (max-width: 699px) {
+    body[data-tab="gallery"]:not(.no-photo) #slidersCard, body[data-tab="sliders"] #galleryCard { display: none; }
+  }
+  @media (min-width: 700px) {
+    .main { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-areas: "stage stage" "gallery sliders"; }
+    body.no-photo .main { grid-template-areas: "stage sliders"; }
+    .tabs { display: none; }
+  }
+  @media (min-width: 1200px) {
+    .main { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(250px, 0.72fr); grid-template-areas: "stage gallery sliders"; }
+    body.no-photo .main { grid-template-columns: minmax(0, 1.6fr) minmax(250px, 0.72fr); grid-template-areas: "stage sliders"; }
+  }
+  /* while cropping, the gallery and sliders wait */
+  body.cropping #galleryCard, body.cropping #slidersCard { opacity: 0.4; pointer-events: none; }
+
+  .cropview { display: flex; justify-content: center; width: 100%; }
+  .cropwrap { position: relative; overflow: hidden; touch-action: none; line-height: 0; }
+  .cropwrap canvas { display: block; }
+  .cropbox { position: absolute; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55); outline: 1px solid rgba(255, 255, 255, 0.9); cursor: move; }
+  .cropbox .third { position: absolute; background: rgba(255, 255, 255, 0.45); pointer-events: none; }
+  .cropbox .third.v { top: 0; bottom: 0; width: 1px; }
+  .cropbox .third.h { left: 0; right: 0; height: 1px; }
+  .handle { position: absolute; width: 22px; height: 22px; border: 3px solid #fff; }
+  .handle.nw { left: -3px; top: -3px; border-right: 0; border-bottom: 0; cursor: nwse-resize; }
+  .handle.ne { right: -3px; top: -3px; border-left: 0; border-bottom: 0; cursor: nesw-resize; }
+  .handle.sw { left: -3px; bottom: -3px; border-right: 0; border-top: 0; cursor: nesw-resize; }
+  .handle.se { right: -3px; bottom: -3px; border-left: 0; border-top: 0; cursor: nwse-resize; }
+  .croptools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .croptools .straighten { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0; }
+  .croptools .straighten input { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .croptools output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; font-size: 0.85rem; }
+  .croptools .actions { display: flex; gap: 8px; margin-left: auto; }
+
+  .stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .well { background: var(--well); border-radius: 8px; padding: 14px; min-height: 320px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .dropzone {
+    width: 100%; min-height: 300px; border: 2px dashed color-mix(in srgb, var(--on-well) 55%, transparent); border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+    color: var(--on-well); cursor: pointer; padding: 24px;
+  }
+  .dropzone:hover { border-color: var(--on-well); }
+  .dropzone strong { font-size: 1.15rem; }
+  .dropzone span { opacity: 0.8; font-size: 0.9rem; }
+  .views { display: flex; gap: 12px; align-items: flex-start; justify-content: center; width: 100%; }
+  .views figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .views.dual figure { flex: 1 1 0; }
+  .views figcaption { color: var(--on-well); font-size: 0.85rem; }
+  .views canvas { display: block; max-width: 100%; max-height: 72vh; width: auto; height: auto; }
+  .views.single #stage { cursor: pointer; }
+  @media (max-width: 699px) { .views.dual { flex-direction: column; align-items: center; } }
+
+  .stage-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .chip.picking .dot { background: var(--pick); }
+  .chip.original .dot { background: var(--muted); }
+  .meta-right { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .filename { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+
+  .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .segmented button { border: 0; border-radius: 0; padding: 4px 12px; background: var(--surface); color: var(--muted); }
+  .segmented button + button { border-left: 1px solid var(--line); }
+  .segmented button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); margin: 0; }
+  .tabs { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 10px 8px; color: var(--muted); border-bottom: 2px solid transparent; justify-content: center; }
+  .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+
+  .progress { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .round { font-weight: 700; }
+  .steps { display: flex; gap: 5px; align-items: center; }
+  .steps span { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
+  .steps span.done { background: var(--accent); }
+  .steps span.now { background: var(--pick); }
+  .hint { color: var(--muted); margin: 0; font-size: 0.9rem; }
+  .note { font-size: 0.85rem; color: var(--muted); border-left: 3px solid var(--pick); padding-left: 8px; margin: 0; }
+  .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 28px 12px; text-align: center; margin: 0; }
+
+  .grid { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 4px; }
+  .cell { padding: 0; border: 0; border-radius: 3px; overflow: hidden; background: var(--well); outline: 2px solid transparent; outline-offset: 1px; cursor: pointer; }
+  .cell canvas { display: block; width: 100%; height: auto; }
+  .cell.center { outline-color: var(--accent); }
+  .cell.picked { outline: 3px solid var(--pick); }
+  .cell:focus-visible { outline: 3px solid var(--fg); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row.end { justify-content: space-between; }
+  select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+  label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.9rem; }
+
+  fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  fieldset:disabled { opacity: 0.5; }
+  legend { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); padding: 0; margin-bottom: 4px; }
+  #sliders { display: flex; flex-direction: column; gap: 14px; }
+  .slider { display: grid; grid-template-columns: 6.2em minmax(0, 1fr) 2.8em; gap: 8px; align-items: center; }
+  .slider label { font-size: 0.9rem; }
+  .slider output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: 0.85rem; }
+  .slider input { width: 100%; accent-color: var(--accent); }
+  .ends { font-size: 0.72rem; color: var(--muted); display: flex; justify-content: space-between; grid-column: 2; margin-top: -6px; }
+
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 70%, transparent); border-radius: 8px; font-weight: 500; }
+  .error { color: var(--danger); margin: 0; }
+  .dropcover {
+    position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--accent) 18%, transparent); border: 4px dashed var(--accent); font-size: 1.3rem; font-weight: 700; color: var(--fg); pointer-events: none;
+  }
+
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); max-width: min(720px, calc(100vw - 32px)); padding: 16px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  dialog img { display: block; max-height: 60vh; margin: 10px auto; }
+
+  footer { color: var(--muted); font-size: 0.8rem; }
+  .notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-width: 90ch; }
+  .notes li { position: relative; padding-left: 16px; }
+  .notes li::before { content: ""; position: absolute; left: 2px; top: 0.6em; width: 6px; height: 6px; background: var(--muted); border-radius: 1px; }
+  footer cite { font-style: normal; }
+  @media (prefers-reduced-motion: no-preference) { .cell { transition: outline-color 0.12s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Sequential Gallery</h1>
+    <button id="download" type="button" class="primary" disabled>下載 JPG</button>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="照片">
+      <div class="well" id="well">
+        <div class="dropzone" id="dropzone" role="button" tabindex="0">
+          <strong>點這裡選擇照片</strong>
+          <span>或把電腦裡的照片拖曳到網頁上</span>
+        </div>
+        <div class="views single" id="views" hidden>
+          <figure id="origFigure" hidden>
+            <figcaption>原圖</figcaption>
+            <canvas id="orig" width="10" height="10" aria-label="原圖"></canvas>
+          </figure>
+          <figure>
+            <figcaption id="stageCaption" hidden>效果</figcaption>
+            <canvas id="stage" width="10" height="10" aria-label="照片預覽，點一下切換原圖和效果"></canvas>
+          </figure>
+        </div>
+        <div class="cropview" id="cropView" hidden>
+          <div class="cropwrap" id="cropWrap">
+            <canvas id="cropCanvas" width="10" height="10" aria-label="裁切預覽"></canvas>
+            <div class="cropbox" id="cropBox" data-mode="move">
+              <span class="third v" style="left:33.333%"></span><span class="third v" style="left:66.667%"></span>
+              <span class="third h" style="top:33.333%"></span><span class="third h" style="top:66.667%"></span>
+              <span class="handle nw" data-mode="nw"></span><span class="handle ne" data-mode="ne"></span>
+              <span class="handle sw" data-mode="sw"></span><span class="handle se" data-mode="se"></span>
+            </div>
+          </div>
+        </div>
+        <div class="overlay" id="busy" hidden>處理中…</div>
+        <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+      </div>
+      <div class="stage-meta" id="stageMeta" hidden>
+        <span class="chip" id="stageChip"><span class="dot"></span><span id="stageLabel">目前的效果</span></span>
+        <div class="meta-right">
+          <span class="segmented" role="group" aria-label="顯示方式">
+            <button type="button" id="viewSingle" aria-pressed="true">單張</button>
+            <button type="button" id="viewDual" aria-pressed="false">並排比較</button>
+          </span>
+          <button type="button" id="cropStart">裁切／旋轉</button>
+          <span class="filename" id="filename"></span>
+          <button type="button" class="link" id="replace">更換照片</button>
+        </div>
+      </div>
+      <div class="croptools" id="cropTools" hidden>
+        <button type="button" id="rotLeft" title="向左轉 90°">⟲ 左轉</button>
+        <button type="button" id="rotRight" title="向右轉 90°">⟳ 右轉</button>
+        <label class="straighten" for="straighten">拉直
+          <input type="range" id="straighten" min="-45" max="45" step="0.1" value="0">
+          <output id="straightenOut" for="straighten">0.0°</output>
+        </label>
+        <label class="inline" for="ratio">比例
+          <select id="ratio">
+            <option value="free">自由</option>
+            <option value="orig">原始比例</option>
+            <option value="1">1:1</option>
+            <option value="1.3333">4:3</option>
+            <option value="0.75">3:4（直）</option>
+            <option value="1.5">3:2</option>
+            <option value="0.6667">2:3（直）</option>
+            <option value="1.7778">16:9</option>
+            <option value="0.5625">9:16（直）</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button type="button" id="cropReset">重設</button>
+          <button type="button" id="cropCancel">取消</button>
+          <button type="button" id="cropApply" class="primary">套用</button>
+        </div>
+      </div>
+      <p class="error" id="error" hidden></p>
+    </section>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabGallery" aria-selected="true" aria-controls="galleryCard">圖庫挑選</button>
+      <button type="button" role="tab" id="tabSliders" aria-selected="false" aria-controls="slidersCard">調整照片</button>
+    </div>
+
+    <section class="card" id="galleryCard" aria-label="圖庫挑選">
+      <h2>圖庫挑選</h2>
+      <p class="empty" id="galleryEmpty">選好照片後，這裡會出現 25 張不同效果的小圖。</p>
+      <div id="galleryBody" hidden>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="progress">
+            <span class="round" id="roundLabel">第 1 輪</span>
+            <span class="steps" id="steps" aria-label="本輪進度"></span>
+          </div>
+          <p class="hint" id="galleryHint"></p>
+          <p class="note" id="restartNote" hidden>你在「調整照片」手動調整過，所以圖庫從調整後的樣子重新開始。</p>
+          <div class="grid" id="grid"></div>
+          <div class="row">
+            <button id="confirm" type="button" class="pick" disabled>確認這張</button>
+            <button id="undo" type="button" disabled>上一步</button>
+          </div>
+          <div class="row end">
+            <label class="inline" for="gridSize">格子
+              <select id="gridSize">
+                <option value="5">5 × 5</option>
+                <option value="3">3 × 3（格子較大）</option>
+              </select>
+            </label>
+            <button id="restart" type="button">從目前效果重新探索</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="slidersCard" aria-label="調整照片">
+      <h2>調整照片</h2>
+      <div id="sliders"></div>
+      <div class="row"><button id="reset" type="button" disabled>重置</button></div>
+    </section>
+  </div>
+
+  <footer>
+    <ul class="notes">
+      <li>方法出自 <cite>Yuki Koyama, Issei Sato, Masataka Goto. “Sequential Gallery for Interactive Visual Design Optimization.” ACM Transactions on Graphics 39(4), 2020。</cite></li>
+      <li>本網頁不會上傳檔案到任何地方。</li>
+      <li>支援 JPG、PNG、WebP。</li>
+    </ul>
+  </footer>
+</div>
+
+<div class="dropcover" id="dropcover" hidden>放開來使用這張照片</div>
+
+<dialog id="saveDialog">
+  <strong>下載好了嗎？</strong>
+  <p class="hint">這個畫面無法直接存檔。請在下面的圖片上按右鍵選「另存圖片」（手機請長按圖片）。</p>
+  <img id="saveImg" alt="調整後的完整照片">
+  <div class="row"><button id="closeDialog" type="button">關閉</button></div>
+</dialog>
+
+<script src="bo.js"></script>
+<script>
+"use strict";
+const { SequentialPlaneSearch, planePoint } = globalThis.SequentialGallery;
+
+// The 12 design parameters (same as the paper's photo color enhancement). 0 = no change.
+const PARAMS = [
+  { group: "基本", name: "亮度", min: -60, max: 60, ends: ["暗", "亮"] },
+  { group: "基本", name: "對比", min: -50, max: 50, ends: ["柔", "強"] },
+  { group: "基本", name: "飽和度", min: -50, max: 50, ends: ["淡", "濃"] },
+  { group: "暗部色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
+  { group: "暗部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
+  { group: "暗部色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
+  { group: "中間調色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
+  { group: "中間調色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
+  { group: "中間調色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
+  { group: "亮部色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
+  { group: "亮部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
+  { group: "亮部色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
+];
+const CLICKS_PER_ROUND = 4;
+const STAGE_LONG_SIDE = 1600;
+const THUMB_LONG_SIDE = 220;
+const EXPORT_MAX_PIXELS = 50e6;
+
+const $ = id => document.getElementById(id);
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+// ---------- image processing ----------
+
+// Builds a per-pixel function for the given 12 values. Order matches the Photoshop plugin:
+// brightness/contrast, then saturation, then color balance (with luminosity preserved).
+function buildPipeline(values) {
+  const [bright, contrast, sat, ...cb] = values;
+  const gamma = Math.pow(2, -bright / 100);
+  const tone = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let v = Math.pow(i / 255, gamma);
+    if (contrast >= 0) {
+      const s = v < 0.5 ? 2 * v * v : 1 - 2 * (1 - v) * (1 - v);
+      v += (s - v) * (contrast / 50);
+    } else {
+      v = 0.5 + (v - 0.5) * (1 + contrast / 100);
+    }
+    tone[i] = clamp01(v);
+  }
+  const k = 1 + sat / 100;
+  const useCB = cb.some(v => v !== 0);
+  // color balance weights by lightness (the GIMP color-balance model)
+  const off = [new Float32Array(511), new Float32Array(511), new Float32Array(511)];
+  if (useCB) {
+    for (let i = 0; i <= 510; i++) {
+      const l = i / 510;
+      const ws = clamp01((l - 0.333) / -0.25 + 0.5) * 0.7;
+      const wm = clamp01((l - 0.333) / 0.25 + 0.5) * clamp01((l + 0.333 - 1) / -0.25 + 0.5) * 0.7;
+      const wh = clamp01((l + 0.333 - 1) / 0.25 + 0.5) * 0.7;
+      for (let c = 0; c < 3; c++) off[c][i] = (cb[c] * ws + cb[3 + c] * wm + cb[6 + c] * wh) / 100;
+    }
+  }
+  const [oR, oG, oB] = off;
+
+  return function apply(src, dst, from, to) {
+    for (let p = from; p < to; p += 4) {
+      let r = tone[src[p]], g = tone[src[p + 1]], b = tone[src[p + 2]];
+      if (k !== 1) {
+        const L = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = clamp01(L + (r - L) * k); g = clamp01(L + (g - L) * k); b = clamp01(L + (b - L) * k);
+      }
+      if (useCB) {
+        const l = (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+        const i = (l * 510 + 0.5) | 0;
+        const r2 = clamp01(r + oR[i]), g2 = clamp01(g + oG[i]), b2 = clamp01(b + oB[i]);
+        // keep the original HSL lightness, keep the new hue and saturation
+        const mx = Math.max(r2, g2, b2), mn = Math.min(r2, g2, b2), d = mx - mn;
+        if (d < 1e-6) { r = g = b = l; }
+        else {
+          const l2 = (mx + mn) / 2;
+          const s2 = l2 > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+          const C = (1 - Math.abs(2 * l - 1)) * s2, base = l - C / 2, f = C / d;
+          r = base + (r2 - mn) * f; g = base + (g2 - mn) * f; b = base + (b2 - mn) * f;
+        }
+      }
+      dst[p] = r * 255; dst[p + 1] = g * 255; dst[p + 2] = b * 255; dst[p + 3] = src[p + 3];
+    }
+  };
+}
+
+function processImageData(srcData, values, out) {
+  const dst = out || new ImageData(srcData.width, srcData.height);
+  buildPipeline(values)(srcData.data, dst.data, 0, srcData.data.length);
+  return dst;
+}
+
+function scaledImageData(bitmap, longSide) {
+  const k = Math.min(1, longSide / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+// ---------- state ----------
+
+const state = {
+  name: "",
+  bitmap: null,
+  stageSrc: null,
+  stageOut: null,
+  thumbSrc: null,
+  current: PARAMS.map(() => 0), // confirmed look (slider values)
+  gallery: null,
+  view: "single",               // "single" | "dual"
+  showOriginal: false,          // single view only
+  geom: null,                   // crop & rotation applied to the photo
+  cropDraft: null,              // geometry being edited while the crop tools are open
+};
+
+const toX = values => Float64Array.from(values, (v, i) => (v - PARAMS[i].min) / (PARAMS[i].max - PARAMS[i].min));
+const toValues = x => PARAMS.map((p, i) => Math.round(p.min + clamp01(x[i]) * (p.max - p.min)));
+
+function stageValues() {
+  const g = state.gallery;
+  return g && g.picked !== null ? g.cells[g.picked].values : state.current;
+}
+
+// ---------- big preview ----------
+
+let stagePending = false;
+function drawStage() {
+  if (stagePending) return;
+  stagePending = true;
+  requestAnimationFrame(() => {
+    stagePending = false;
+    if (!state.stageSrc) return;
+    processImageData(state.stageSrc, stageValues(), state.stageOut);
+    const showOriginal = state.view === "single" && state.showOriginal;
+    $("stage").getContext("2d").putImageData(showOriginal ? state.stageSrc : state.stageOut, 0, 0);
+
+    const picking = state.gallery && state.gallery.picked !== null;
+    const what = picking ? "橘框那張（還沒確認）" : "目前的效果";
+    const chip = $("stageChip");
+    chip.classList.toggle("picking", picking && !showOriginal);
+    chip.classList.toggle("original", showOriginal);
+    if (state.view === "dual") $("stageLabel").textContent = `右邊：${what}`;
+    else $("stageLabel").textContent = showOriginal ? "原圖・點圖片回到效果" : `${what}・點圖片看原圖`;
+    $("stageCaption").textContent = picking ? "效果（橘框那張）" : "效果";
+  });
+}
+
+function setView(view) {
+  state.view = view;
+  state.showOriginal = false;
+  $("viewSingle").setAttribute("aria-pressed", view === "single");
+  $("viewDual").setAttribute("aria-pressed", view === "dual");
+  const views = $("views");
+  views.classList.toggle("single", view === "single");
+  views.classList.toggle("dual", view === "dual");
+  $("origFigure").hidden = view !== "dual";
+  $("stageCaption").hidden = view !== "dual";
+  drawStage();
+}
+
+// ---------- gallery ----------
+
+function startGallery() {
+  const sps = new SequentialPlaneSearch(PARAMS.length, toX(state.current));
+  state.gallery = {
+    sps, round: 1, zoom: { s: 0, t: 0, half: 1, clicks: 0 },
+    chosenX: Float64Array.from(sps.plane.c), picked: null, history: [], cells: [], n: 5,
+  };
+  buildGrid();
+}
+
+function buildGrid() {
+  const g = state.gallery;
+  const n = Number($("gridSize").value);
+  const { s, t, half } = g.zoom;
+  g.n = n;
+  g.picked = null;
+  g.cells = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const cs = s + half * (2 * c / (n - 1) - 1);
+      const ct = t + half * (1 - 2 * r / (n - 1));
+      const x = planePoint(g.sps.plane, cs, ct);
+      g.cells.push({ s: cs, t: ct, x, values: toValues(x), center: r === (n - 1) / 2 && c === (n - 1) / 2 });
+    }
+  }
+
+  const grid = $("grid");
+  grid.style.setProperty("--n", n);
+  grid.textContent = "";
+  const src = state.thumbSrc;
+  const out = new ImageData(src.width, src.height);
+  g.cells.forEach((cell, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cell" + (cell.center ? " center" : "");
+    btn.setAttribute("aria-label", `選項 第 ${Math.floor(i / n) + 1} 列第 ${i % n + 1} 個` + (cell.center ? "（目前確認的）" : ""));
+    const cv = document.createElement("canvas");
+    cv.width = src.width; cv.height = src.height;
+    processImageData(src, cell.values, out);
+    cv.getContext("2d").putImageData(out, 0, 0);
+    btn.appendChild(cv);
+    btn.addEventListener("click", () => pick(i));
+    grid.appendChild(btn);
+  });
+  updateGalleryUI();
+  drawStage();
+}
+
+function pick(i) {
+  const g = state.gallery;
+  g.picked = i;
+  state.showOriginal = false;
+  [...$("grid").children].forEach((el, j) => el.classList.toggle("picked", j === i));
+  updateGalleryUI();
+  drawStage();
+}
+
+function confirmPick() {
+  const g = state.gallery;
+  if (!g || g.picked === null) return;
+  const cell = g.cells[g.picked];
+  g.history.push({ model: g.sps.snapshot(), round: g.round, zoom: { ...g.zoom }, chosenX: g.chosenX, current: state.current.slice() });
+  g.chosenX = cell.x;
+  state.current = cell.values.slice();
+  syncSliders();
+  $("restartNote").hidden = true;
+  if (g.zoom.clicks + 1 < CLICKS_PER_ROUND) {
+    g.zoom = { s: cell.s, t: cell.t, half: g.zoom.half / 2, clicks: g.zoom.clicks + 1 };
+    buildGrid();
+  } else {
+    $("confirm").disabled = true;
+    $("undo").disabled = true;
+    $("galleryHint").textContent = "正在根據你的選擇，計算下一輪的方向…";
+    setTimeout(() => {
+      g.sps.submit(cell.x);
+      g.round++;
+      g.zoom = { s: 0, t: 0, half: 1, clicks: 0 };
+      buildGrid();
+    }, 20);
+  }
+}
+
+function undo() {
+  const g = state.gallery;
+  if (!g || g.history.length === 0) return;
+  const prev = g.history.pop();
+  g.sps.restore(prev.model);
+  g.round = prev.round;
+  g.zoom = prev.zoom;
+  g.chosenX = prev.chosenX;
+  state.current = prev.current;
+  syncSliders();
+  buildGrid();
+  $("galleryHint").textContent = "已回到上一步，請重新選擇。";
+}
+
+function updateGalleryUI() {
+  const g = state.gallery;
+  $("roundLabel").textContent = `第 ${g.round} 輪・第 ${g.zoom.clicks + 1}/${CLICKS_PER_ROUND} 次`;
+  const steps = $("steps");
+  steps.textContent = "";
+  for (let i = 0; i < CLICKS_PER_ROUND; i++) {
+    const s = document.createElement("span");
+    if (i < g.zoom.clicks) s.className = "done";
+    else if (i === g.zoom.clicks) s.className = "now";
+    steps.appendChild(s);
+  }
+  $("confirm").disabled = g.picked === null;
+  $("undo").disabled = g.history.length === 0;
+  $("galleryHint").textContent = g.picked === null
+    ? "點一張小圖，大圖會顯示那個效果。藍框是目前確認的效果。"
+    : "大圖正在顯示橘框這張。喜歡就按「確認這張」，不喜歡就點別張。";
+}
+
+// ---------- sliders ----------
+
+function buildSliders() {
+  const box = $("sliders");
+  let fs = null, group = null;
+  PARAMS.forEach((p, i) => {
+    if (p.group !== group) {
+      group = p.group;
+      fs = document.createElement("fieldset");
+      fs.disabled = true;
+      const lg = document.createElement("legend");
+      lg.textContent = group;
+      fs.appendChild(lg);
+      box.appendChild(fs);
+    }
+    const row = document.createElement("div");
+    row.className = "slider";
+    row.innerHTML = `<label for="p${i}"></label><input type="range" id="p${i}" min="${p.min}" max="${p.max}" step="1" value="0"><output for="p${i}" id="o${i}">0</output><div class="ends"><span></span><span></span></div>`;
+    row.querySelector("label").textContent = p.name;
+    const [a, b] = row.querySelectorAll(".ends span");
+    a.textContent = p.ends[0]; b.textContent = p.ends[1];
+    const input = row.querySelector("input");
+    input.addEventListener("input", () => {
+      state.current[i] = Number(input.value);
+      $("o" + i).textContent = state.current[i];
+      if (state.gallery) state.gallery.picked = null;
+      state.showOriginal = false;
+      drawStage();
+    });
+    // when the slider is released, the gallery starts again from the new look
+    input.addEventListener("change", restartFromSliders);
+    fs.appendChild(row);
+  });
+}
+
+function restartFromSliders() {
+  if (!state.thumbSrc) return;
+  startGallery();
+  $("restartNote").hidden = false;
+}
+
+function syncSliders() {
+  state.current.forEach((v, i) => { $("p" + i).value = v; $("o" + i).textContent = v; });
+}
+
+function showTab(which) {
+  document.body.dataset.tab = which;
+  $("tabGallery").setAttribute("aria-selected", which === "gallery");
+  $("tabSliders").setAttribute("aria-selected", which === "sliders");
+}
+
+// ---------- crop & rotate ----------
+
+// rot90: quarter turns clockwise (0-3); angle: straighten in degrees; crop: normalized box in the rotated frame.
+const defaultGeom = () => ({ rot90: 0, angle: 0, crop: { x: 0, y: 0, w: 1, h: 1 } });
+const copyGeom = g => ({ rot90: g.rot90, angle: g.angle, crop: { ...g.crop } });
+
+function frameSize(bitmap, geom) {
+  return geom.rot90 % 2 ? { W: bitmap.height, H: bitmap.width } : { W: bitmap.width, H: bitmap.height };
+}
+
+// How much to enlarge a W×H picture turned by `deg` so it still fills the W×H frame (no empty corners).
+function coverScale(W, H, deg) {
+  const t = Math.abs(deg) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+  return Math.max((W * c + H * s) / W, (W * s + H * c) / H);
+}
+
+// Draws the photo rotated, straightened and cropped. Options: crop (default true), maxLong, maxPixels.
+function renderGeometry(bitmap, geom, opts = {}) {
+  const { W, H } = frameSize(bitmap, geom);
+  const cr = opts.crop === false ? { x: 0, y: 0, w: 1, h: 1 } : geom.crop;
+  const cw = cr.w * W, ch = cr.h * H;
+  const k = Math.min(1, (opts.maxLong || Infinity) / Math.max(cw, ch), Math.sqrt((opts.maxPixels || Infinity) / (cw * ch)));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(cw * k));
+  canvas.height = Math.max(1, Math.round(ch * k));
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingQuality = "high";
+  ctx.scale(k, k);
+  ctx.translate(-cr.x * W + W / 2, -cr.y * H + H / 2);
+  ctx.rotate(geom.rot90 * Math.PI / 2 + geom.angle * Math.PI / 180);
+  const s = coverScale(W, H, geom.angle);
+  ctx.scale(s, s);
+  ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2);
+  return canvas;
+}
+
+function openCrop() {
+  if (!state.bitmap) return;
+  state.cropDraft = copyGeom(state.geom);
+  document.body.classList.add("cropping");
+  $("views").hidden = true;
+  $("stageMeta").hidden = true;
+  $("cropView").hidden = false;
+  $("cropTools").hidden = false;
+  $("straighten").value = state.cropDraft.angle;
+  $("straightenOut").textContent = state.cropDraft.angle.toFixed(1) + "°";
+  $("ratio").value = "free";
+  renderCropView();
+}
+
+function closeCrop() {
+  state.cropDraft = null;
+  document.body.classList.remove("cropping");
+  $("cropView").hidden = true;
+  $("cropTools").hidden = true;
+  $("views").hidden = false;
+  $("stageMeta").hidden = false;
+}
+
+let cropRenderPending = false;
+function renderCropView() {
+  if (cropRenderPending) return;
+  cropRenderPending = true;
+  requestAnimationFrame(() => {
+    cropRenderPending = false;
+    if (!state.cropDraft) return;
+    const frame = renderGeometry(state.bitmap, state.cropDraft, { crop: false, maxLong: 1200 });
+    const data = frame.getContext("2d").getImageData(0, 0, frame.width, frame.height);
+    processImageData(data, stageValues(), data);
+    const cv = $("cropCanvas");
+    cv.width = frame.width; cv.height = frame.height;
+    cv.getContext("2d").putImageData(data, 0, 0);
+    sizeCropCanvas();
+    placeCropBox();
+  });
+}
+
+// Fits the crop picture into the box on screen (set in pixels so the crop frame can track it exactly).
+function sizeCropCanvas() {
+  const cv = $("cropCanvas");
+  const availW = $("cropView").clientWidth || cv.width;
+  const availH = window.innerHeight * 0.68;
+  const k = Math.min(1, availW / cv.width, availH / cv.height);
+  cv.style.width = Math.round(cv.width * k) + "px";
+  cv.style.height = Math.round(cv.height * k) + "px";
+}
+
+function placeCropBox() {
+  const c = state.cropDraft.crop, box = $("cropBox");
+  box.style.left = c.x * 100 + "%";
+  box.style.top = c.y * 100 + "%";
+  box.style.width = c.w * 100 + "%";
+  box.style.height = c.h * 100 + "%";
+}
+
+// Locked aspect ratio as width/height in normalized frame units, or null when free.
+function cropRatioN() {
+  const v = $("ratio").value;
+  if (v === "free") return null;
+  const { W, H } = frameSize(state.bitmap, state.cropDraft);
+  const real = v === "orig" ? W / H : Number(v);
+  return real * H / W;
+}
+
+// Largest box with the locked ratio, centered where the current box is.
+function fitRatio() {
+  const rn = cropRatioN();
+  if (!rn) return;
+  const c = state.cropDraft.crop, cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+  let w = Math.min(1, rn), h = w / rn;
+  if (h > 1) { h = 1; w = rn; }
+  state.cropDraft.crop = { x: Math.min(1 - w, Math.max(0, cx - w / 2)), y: Math.min(1 - h, Math.max(0, cy - h / 2)), w, h };
+  placeCropBox();
+}
+
+function rotate90(dir) {
+  const g = state.cropDraft;
+  g.rot90 = (g.rot90 + (dir > 0 ? 1 : 3)) % 4;
+  g.crop = { x: 0, y: 0, w: 1, h: 1 };
+  fitRatio();
+  renderCropView();
+}
+
+let cropDrag = null;
+const MIN_CROP = 0.05;
+function onCropPointerDown(e) {
+  if (!state.cropDraft) return;
+  const mode = e.target.dataset.mode || "move";
+  const rect = $("cropCanvas").getBoundingClientRect();
+  cropDrag = { mode, x0: e.clientX, y0: e.clientY, start: { ...state.cropDraft.crop }, rect };
+  $("cropBox").setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+
+function onCropPointerMove(e) {
+  if (!cropDrag) return;
+  const { mode, start, rect } = cropDrag;
+  if (!rect.width || !rect.height) return;
+  const dx = (e.clientX - cropDrag.x0) / rect.width, dy = (e.clientY - cropDrag.y0) / rect.height;
+  if (mode === "move") {
+    state.cropDraft.crop = { ...start, x: Math.min(1 - start.w, Math.max(0, start.x + dx)), y: Math.min(1 - start.h, Math.max(0, start.y + dy)) };
+    placeCropBox();
+    return;
+  }
+  // resizing from a corner: the opposite corner stays put
+  const east = mode.includes("e"), south = mode.includes("s");
+  const ax = east ? start.x : start.x + start.w, ay = south ? start.y : start.y + start.h;
+  const maxW = east ? 1 - ax : ax, maxH = south ? 1 - ay : ay;
+  let w = Math.min(maxW, Math.max(MIN_CROP, east ? start.w + dx : start.w - dx));
+  let h = Math.min(maxH, Math.max(MIN_CROP, south ? start.h + dy : start.h - dy));
+  const rn = cropRatioN();
+  if (rn) {
+    h = w / rn;
+    if (h > maxH) { h = maxH; w = h * rn; }
+  }
+  state.cropDraft.crop = { x: east ? ax : ax - w, y: south ? ay : ay - h, w, h };
+  placeCropBox();
+}
+
+function onCropPointerUp() { cropDrag = null; }
+
+function applyCrop() {
+  state.geom = copyGeom(state.cropDraft);
+  closeCrop();
+  rebuildSources();
+  if (state.gallery) buildGrid(); // same choices, new framing
+  drawStage();
+}
+
+// ---------- loading & saving ----------
+
+// Rebuilds the preview-sized pictures from the original photo with the current crop/rotation.
+function rebuildSources() {
+  const big = renderGeometry(state.bitmap, state.geom, { maxLong: STAGE_LONG_SIDE });
+  state.stageSrc = big.getContext("2d").getImageData(0, 0, big.width, big.height);
+  state.stageOut = new ImageData(big.width, big.height);
+  state.thumbSrc = scaledImageData(big, THUMB_LONG_SIDE);
+  for (const id of ["stage", "orig"]) {
+    $(id).width = big.width;
+    $(id).height = big.height;
+  }
+  $("orig").getContext("2d").putImageData(state.stageSrc, 0, 0);
+}
+
+function loadBitmap(bitmap, name) {
+  if (state.cropDraft) closeCrop();
+  state.bitmap = bitmap;
+  state.name = name;
+  state.geom = defaultGeom();
+  rebuildSources();
+  document.body.classList.remove("no-photo");
+  $("filename").textContent = name;
+  $("dropzone").hidden = true;
+  $("views").hidden = false;
+  $("stageMeta").hidden = false;
+  $("galleryEmpty").hidden = true;
+  $("galleryBody").hidden = false;
+  $("download").disabled = false;
+  $("reset").disabled = false;
+  document.querySelectorAll("#sliders fieldset").forEach(fs => { fs.disabled = false; });
+  state.current = PARAMS.map(() => 0);
+  state.showOriginal = false;
+  syncSliders();
+  $("restartNote").hidden = true;
+  startGallery();
+}
+
+async function loadFile(file) {
+  showError("");
+  if (file.type && !file.type.startsWith("image/")) {
+    showError("這不是照片檔。請使用 JPG、PNG 或 WebP。");
+    return;
+  }
+  try {
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch (e) {
+      bitmap = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+    }
+    loadBitmap(bitmap, file.name);
+  } catch (e) {
+    showError("讀不到這個檔案。請使用 JPG、PNG 或 WebP。");
+  }
+}
+
+let downloadsApi;
+async function downloadJPEG() {
+  if (!state.bitmap) return;
+  showError("");
+  const busy = $("busy");
+  busy.hidden = false;
+  busy.textContent = "處理完整尺寸照片中…";
+  try {
+    await new Promise(r => setTimeout(r, 30));
+    const canvas = renderGeometry(state.bitmap, state.geom, { maxPixels: EXPORT_MAX_PIXELS });
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const img = ctx.getImageData(0, 0, w, h);
+    const apply = buildPipeline(stageValues());
+    const total = img.data.length, chunk = 4 * 1000000;
+    for (let p = 0; p < total; p += chunk) {
+      apply(img.data, img.data, p, Math.min(total, p + chunk));
+      busy.textContent = `處理完整尺寸照片中… ${Math.round(100 * Math.min(1, (p + chunk) / total))}%`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    ctx.putImageData(img, 0, 0);
+    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.92));
+    if (!blob) throw new Error("toBlob failed");
+    const filename = (state.name.replace(/\.[^.]+$/, "") || "photo") + "-sg.jpg";
+    busy.hidden = true;
+
+    // a normal website (e.g. GitHub Pages) can save the file directly
+    if (!window.claude) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      return;
+    }
+    if (downloadsApi === undefined) downloadsApi = window.claude ? await window.claude.use("downloads") : null;
+    if (downloadsApi) {
+      try {
+        await downloadsApi.save({ filename, data: blob });
+        return;
+      } catch (e) {
+        if (e && e.code === "declined") return;
+        if (e && e.code === "rate_limited") { showError("已經有一個存檔視窗開著，請先處理它。"); return; }
+      }
+    }
+    $("saveImg").src = URL.createObjectURL(blob);
+    $("saveDialog").showModal();
+  } catch (e) {
+    showError("這張照片太大，瀏覽器處理不了。請換一張比較小的照片再試。");
+  } finally {
+    busy.hidden = true;
+  }
+}
+
+function showError(text) {
+  $("error").textContent = text;
+  $("error").hidden = !text;
+}
+
+// ---------- wiring ----------
+
+document.body.classList.add("no-photo");
+buildSliders();
+showTab("gallery");
+
+$("cropStart").addEventListener("click", openCrop);
+$("cropCancel").addEventListener("click", () => { closeCrop(); drawStage(); });
+$("cropApply").addEventListener("click", applyCrop);
+$("cropReset").addEventListener("click", () => {
+  state.cropDraft = defaultGeom();
+  $("straighten").value = 0;
+  $("straightenOut").textContent = "0.0°";
+  $("ratio").value = "free";
+  renderCropView();
+});
+$("rotLeft").addEventListener("click", () => rotate90(-1));
+$("rotRight").addEventListener("click", () => rotate90(1));
+$("straighten").addEventListener("input", e => {
+  state.cropDraft.angle = Number(e.target.value);
+  $("straightenOut").textContent = state.cropDraft.angle.toFixed(1) + "°";
+  renderCropView();
+});
+$("ratio").addEventListener("change", fitRatio);
+window.addEventListener("resize", () => { if (state.cropDraft) sizeCropCanvas(); });
+$("cropBox").addEventListener("pointerdown", onCropPointerDown);
+$("cropBox").addEventListener("pointermove", onCropPointerMove);
+$("cropBox").addEventListener("pointerup", onCropPointerUp);
+$("cropBox").addEventListener("pointercancel", onCropPointerUp);
+$("tabGallery").addEventListener("click", () => showTab("gallery"));
+$("tabSliders").addEventListener("click", () => showTab("sliders"));
+$("confirm").addEventListener("click", confirmPick);
+$("undo").addEventListener("click", undo);
+$("restart").addEventListener("click", () => { $("restartNote").hidden = true; startGallery(); });
+$("gridSize").addEventListener("change", () => { if (state.gallery) buildGrid(); });
+$("reset").addEventListener("click", () => {
+  state.current = PARAMS.map(() => 0);
+  syncSliders();
+  restartFromSliders();
+});
+$("download").addEventListener("click", downloadJPEG);
+$("closeDialog").addEventListener("click", () => $("saveDialog").close());
+
+// choosing a photo: the big box (before a photo is loaded) or the small "更換照片" link
+const openPicker = () => $("file").click();
+$("dropzone").addEventListener("click", openPicker);
+$("dropzone").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); } });
+$("replace").addEventListener("click", openPicker);
+$("file").addEventListener("change", e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; });
+
+// single view: click the photo to flip between original and effect
+$("stage").addEventListener("click", () => {
+  if (state.view !== "single") return;
+  state.showOriginal = !state.showOriginal;
+  drawStage();
+});
+$("viewSingle").addEventListener("click", () => setView("single"));
+$("viewDual").addEventListener("click", () => setView("dual"));
+
+// drag a photo from the computer onto anywhere on the page
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+document.addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("dropcover").hidden = false; });
+document.addEventListener("dragover", e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+document.addEventListener("dragleave", e => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (dragDepth === 0) $("dropcover").hidden = true; });
+document.addEventListener("drop", e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $("dropcover").hidden = true;
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+</script>
+
+</body>
+</html>
