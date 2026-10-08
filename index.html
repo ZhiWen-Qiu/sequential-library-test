@@ -166,7 +166,13 @@
   .views.dual figure { flex: 1 1 0; }
   .views canvas { display: block; max-width: 100%; max-height: 72vh; width: auto; height: auto; }
   .views.single #stage { cursor: pointer; }
-  @media (max-width: 699px) { .views.dual { flex-direction: column; align-items: center; } }
+  /* side by side: both photos fit inside the height the single photo had */
+  .views.dual canvas { max-height: var(--well-h, 72vh); }
+  .minis.invisible { visibility: hidden; }
+  @media (max-width: 699px) {
+    .views.dual { flex-direction: column; align-items: center; }
+    .views.dual canvas { max-height: calc((var(--well-h, 72vh) - 12px) / 2); }
+  }
 
   .stage-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
@@ -558,6 +564,8 @@ function drawMinis(picking, showOriginal) {
 }
 
 function setView(view) {
+  // measure the photo box before anything changes, while it still has the single-view height
+  const singleHeight = state.view === "single" ? $("well").clientHeight : null;
   state.view = view;
   state.showOriginal = false;
   $("viewSingle").setAttribute("aria-pressed", view === "single");
@@ -566,7 +574,19 @@ function setView(view) {
   views.classList.toggle("single", view === "single");
   views.classList.toggle("dual", view === "dual");
   $("origFigure").hidden = view !== "dual";
-  $("minis").hidden = view === "dual";
+  // keep the work area the same size in both views: the minis keep their space while invisible,
+  // and the photo box keeps the height it had in single view
+  $("minis").classList.toggle("invisible", view === "dual");
+  const well = $("well"), stage = panelEl("stage");
+  if (view === "dual") {
+    if (singleHeight) {
+      well.style.minHeight = singleHeight + "px";
+      stage.style.setProperty("--well-h", singleHeight + "px");
+    }
+  } else {
+    well.style.minHeight = "";
+    stage.style.removeProperty("--well-h");
+  }
   drawStage();
 }
 
