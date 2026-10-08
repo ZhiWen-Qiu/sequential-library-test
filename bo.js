@@ -260,10 +260,38 @@ function initialPlane(dim, center, size = 0.5) {
 
 class SequentialPlaneSearch {
   // center: optional starting point in [0,1]^dim (defaults to the middle of the space)
-  constructor(dim, center) {
+  // size: how far the first set of options spreads from the center
+  constructor(dim, center, size) {
     this.dim = dim;
     this.model = new PreferenceModel(dim);
-    this.plane = initialPlane(dim, center);
+    this.plane = initialPlane(dim, center, size);
+  }
+
+  // A fresh set of random directions around `center`, keeping what was learned so far.
+  // A bigger `size` reaches further away from the center.
+  reseed(center, size) {
+    this.plane = initialPlane(this.dim, center, size);
+    return this.plane;
+  }
+
+  // "None of these": the current choice is better than everything shown on this plane.
+  // The next plane keeps the same reach but points in new directions, away from the ones just shown.
+  // `shown`: the options that were on screen (defaults to the plane's corners).
+  dislike(current, size, shown) {
+    const { c, u, v } = this.plane;
+    const rejected = (shown && shown.length ? shown : [add(c, u), add(c, u, -1), add(c, v), add(c, v, -1)]).map(clampVec);
+    this.model.addPreference(clampVec(current), rejected);
+    const away = [u, v];
+    const newDir = () => {
+      let d = randnVec(this.dim);
+      for (const a of away) { const aa = dot(a, a); if (aa > 1e-12) d = add(d, a, -dot(d, a) / aa); }
+      return scale(d, 1 / (norm(d) || 1));
+    };
+    const nu = newDir();
+    away.push(nu);
+    const nv = newDir();
+    this.plane = { c: clampVec(current), u: scale(nu, size), v: scale(nv, size) };
+    return this.plane;
   }
 
   // Everything needed to go back to this exact state later (for "undo").
@@ -285,15 +313,24 @@ class SequentialPlaneSearch {
   }
 
   // The parameter set the user picked on the current plane.
-  submit(chosen) {
+  // Optional extra feedback makes the model learn faster:
+  //   opts.liked / opts.disliked: options the user marked; opts.neutral: unmarked options that were shown
+  //   (all better than disliked, worse than liked). opts.reach: fixed size for the next plane.
+  submit(chosen, opts = {}) {
     const { c, u, v } = this.plane;
-    const shown = [c, add(c, u), add(c, u, -1), add(c, v), add(c, v, -1)].map(clampVec);
-    this.model.addPreference(clampVec(chosen), shown);
-    this.plane = this.nextPlane(clampVec(chosen));
+    const liked = (opts.liked || []).map(clampVec);
+    const disliked = (opts.disliked || []).map(clampVec);
+    const neutral = (opts.neutral && opts.neutral.length ? opts.neutral : [c, add(c, u), add(c, u, -1), add(c, v), add(c, v, -1)]).map(clampVec);
+    const best = clampVec(chosen);
+    // 最喜歡 > 喜歡 > 沒意見 > 不喜歡
+    this.model.addPreference(best, [...liked, ...neutral, ...disliked]);
+    if (neutral.length || disliked.length) for (const l of liked) this.model.addPreference(l, [...neutral, ...disliked]);
+    if (disliked.length) for (const n of neutral) this.model.addPreference(n, disliked);
+    this.plane = this.nextPlane(best, opts.reach);
     return this.plane;
   }
 
-  nextPlane(xBest) {
+  nextPlane(xBest, reach) {
     const model = this.model;
     model.fit();
     const bestMean = model.predict(xBest).mean;
@@ -302,6 +339,7 @@ class SequentialPlaneSearch {
     const xEI = this.maximizeEI(ei);
     let u = add(xEI, xBest, -1);
     if (norm(u) < 0.05) u = scale(randomOrthogonal(new Float64Array(this.dim)), 0.15);
+    if (reach) u = scale(u, reach / norm(u)); // keep BO's direction, use the requested size
 
     const lattice = [];
     for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) lattice.push([-1 + i / 2, -1 + j / 2]);
@@ -315,6 +353,7 @@ class SequentialPlaneSearch {
     const uLen = norm(u);
     const candidateV = () => {
       const dir = randomOrthogonal(u);
+      if (reach) return scale(dir, reach);
       const maxLen = Math.min(2 * uLen, maxSymmetricStep(xBest, dir));
       const minLen = Math.min(Math.max(0.5 * uLen, 0.1), maxLen);
       return scale(dir, minLen + Math.random() * (maxLen - minLen));
@@ -330,6 +369,7 @@ class SequentialPlaneSearch {
     for (let i = 0; i < 80; i++) {
       let v = add(bestV, scale(randnVec(this.dim), step * norm(bestV)));
       v = add(v, u, -dot(v, u) / dot(u, u));
+      if (reach) v = scale(v, reach / (norm(v) || 1));
       const s = planeScore(v);
       if (s > bestScore) { bestV = v; bestScore = s; } else step *= 0.97;
     }
@@ -340,7 +380,7 @@ class SequentialPlaneSearch {
     const dim = this.dim;
     const candidates = [];
     for (let i = 0; i < 1500; i++) candidates.push(Float64Array.from({ length: dim }, Math.random));
-    for (const p of this.model.points) {
+    for (const p of this.model.points.slice(-30)) {
       for (let i = 0; i < 30; i++) candidates.push(clampVec(add(p, randnVec(dim), 0.1)));
     }
     const scored = candidates.map(x => ({ x, s: ei(x) })).sort((a, b) => b.s - a.s).slice(0, 5);

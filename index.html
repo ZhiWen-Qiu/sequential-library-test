@@ -7,7 +7,7 @@
 <title>Sequential Gallery</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600&display=swap">
 <style>
   /* Layout: neutral-grey viewing well for the photo, then the gallery and the sliders.
      Wide: three columns side by side. Medium: photo on top, gallery + sliders below. Phone: photo, then tabs. */
@@ -54,11 +54,13 @@
   button:disabled { opacity: 0.45; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
   button.pick { background: var(--pick); border-color: var(--pick); color: #1c1e21; }
+  button.icon { padding: 6px 8px; line-height: 0; color: var(--muted); }
+  button.icon:hover:not(:disabled) { color: var(--fg); }
   button.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 
   .main { display: grid; gap: 16px; align-items: start; grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "tabs" "gallery" "sliders"; }
   .stage { grid-area: stage; }
-  .tabs { grid-area: tabs; }
+  .tabs { grid-area: tabs; display: flex; }
   #galleryCard { grid-area: gallery; }
   #slidersCard { grid-area: sliders; }
   /* before a photo is chosen there is nothing to pick from: no gallery, no tabs */
@@ -71,10 +73,63 @@
     body.no-photo .main { grid-template-areas: "stage sliders"; }
     .tabs { display: none; }
   }
-  @media (min-width: 1200px) {
-    .main { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(250px, 0.72fr); grid-template-areas: "stage gallery sliders"; }
-    body.no-photo .main { grid-template-columns: minmax(0, 1.6fr) minmax(250px, 0.72fr); grid-template-areas: "stage sliders"; }
+  /* computer: panels side by side; drag the dividers to resize, drag the ⋮⋮ grip to swap places */
+  .splitter, .panel-head, .vsplit { display: none; }
+  @media (max-width: 999px) { .split { display: contents; } }
+  .gridbox { display: flex; justify-content: center; }
+  .treewrap { overflow: auto; max-height: 220px; border-top: 1px solid var(--line); padding: 12px 6px 6px; }
+  .tree { position: relative; }
+  .tree svg { position: absolute; left: 0; top: 0; overflow: visible; fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  .node {
+    position: absolute; width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 3px;
+    border: 1px solid #c4c7cc; background: #fff; color: #000; font-family: var(--font-mono); font-weight: 700; font-size: 14px; line-height: 1;
   }
+  .node:hover:not(:disabled) { border-color: #000; }
+  .node.current { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .gridbox .grid { width: 100%; }
+  .dropmark { position: fixed; z-index: 20; pointer-events: none; border: 2px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  @media (min-width: 1000px) {
+    .main { display: block; padding-bottom: 14px; }
+    .split { display: flex; min-width: 0; }
+    .split.split-row { flex-direction: row; align-items: flex-start; }
+    .split.split-row > :not(.splitter) { flex-shrink: 1; flex-basis: 0; min-width: 0; }
+    .split.split-col { flex-direction: column; gap: 16px; }
+    .split.split-col > * { flex: none !important; }
+    .panel { min-width: 0; position: relative; }
+    /* the ⋮⋮ grip sits in a narrow left gutter, level with the first line, instead of on a row of its own */
+    .panel-head { position: absolute; left: 8px; top: 14px; margin: 0; }
+    .card.panel { padding-left: 28px; }
+    /* photo panel: the grip lives inside the grey box's top-left corner */
+    .stage.panel > .panel-head { left: 3px; top: 4px; z-index: 3; }
+    .stage.panel > .panel-head .grip { color: var(--on-well); opacity: 0.75; }
+    .stage.panel { padding: 20px; }
+    /* bottom edge of each panel: drag to change its height */
+    .vsplit { display: block; position: absolute; left: 0; right: 0; bottom: -15px; height: 14px; cursor: row-resize; touch-action: none; z-index: 2; }
+    .vsplit::after { content: ""; position: absolute; left: 15%; right: 15%; top: 6px; height: 2px; border-radius: 1px; background: transparent; }
+    .vsplit:hover::after, .vsplit.active::after { background: var(--accent); }
+    .panel.sized { height: var(--h); }
+    .card.panel.sized { overflow: auto; }
+    .stage.sized .well { flex: 1 1 0; min-height: 120px; }
+    .stage.sized .views canvas { max-height: var(--fit-h, 72vh); }
+    #galleryCard.sized #galleryBody, #galleryCard.sized #galleryBody > div { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+    #galleryCard.sized .gridbox { flex: 1 1 0; min-height: 0; }
+    body.resizing-rows, body.resizing-rows * { cursor: row-resize !important; user-select: none; }
+    .splitter { display: block; flex: 0 0 16px; align-self: stretch; cursor: col-resize; position: relative; touch-action: none; }
+    .splitter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 7px; width: 2px; border-radius: 1px; background: transparent; }
+    .splitter:hover::after, .splitter.active::after { background: var(--accent); }
+    .grip { display: inline-block; width: 14px; overflow: hidden; text-align: center; font-size: 12px; line-height: 1.6; cursor: grab; color: var(--muted); letter-spacing: -3px; user-select: none; touch-action: none; }
+    .panel-head { display: flex; }
+    .panel.moving { opacity: 0.5; }
+    body.dragging-layout, body.dragging-layout * { cursor: grabbing !important; user-select: none; }
+    body.resizing-layout, body.resizing-layout * { cursor: col-resize !important; user-select: none; }
+  }
+  .panel-head { align-items: center; }
+
+  .minis { display: flex; gap: 6px; }
+  .mini { padding: 0; border: 2px solid transparent; border-radius: 4px; background: var(--well); overflow: hidden; line-height: 0; }
+  .mini canvas { display: block; height: 44px; width: auto; }
+  .mini.active { border-color: var(--accent); }
+  .mini.active.picking { border-color: var(--pick); }
   /* while cropping, the gallery and sliders wait */
   body.cropping #galleryCard, body.cropping #slidersCard { opacity: 0.4; pointer-events: none; }
 
@@ -96,8 +151,8 @@
   .croptools output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; font-size: 0.85rem; }
   .croptools .actions { display: flex; gap: 8px; margin-left: auto; }
 
-  .stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .well { background: var(--well); border-radius: 8px; padding: 14px; min-height: 320px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--well); border-radius: 8px; padding: 14px; }
+  .well { min-height: 300px; display: flex; align-items: center; justify-content: center; position: relative; }
   .dropzone {
     width: 100%; min-height: 300px; border: 2px dashed color-mix(in srgb, var(--on-well) 55%, transparent); border-radius: 8px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
@@ -109,7 +164,6 @@
   .views { display: flex; gap: 12px; align-items: flex-start; justify-content: center; width: 100%; }
   .views figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
   .views.dual figure { flex: 1 1 0; }
-  .views figcaption { color: var(--on-well); font-size: 0.85rem; }
   .views canvas { display: block; max-width: 100%; max-height: 72vh; width: auto; height: auto; }
   .views.single #stage { cursor: pointer; }
   @media (max-width: 699px) { .views.dual { flex-direction: column; align-items: center; } }
@@ -123,35 +177,59 @@
   .filename { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
 
   .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .segmented button { border: 0; border-radius: 0; padding: 4px 12px; background: var(--surface); color: var(--muted); }
+  .segmented button { border: 0; border-radius: 0; padding: 6px 10px; background: var(--surface); color: var(--muted); line-height: 0; }
   .segmented button + button { border-left: 1px solid var(--line); }
   .segmented button[aria-pressed="true"] { background: var(--fg); color: var(--surface); }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .card h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); margin: 0; }
-  .tabs { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .tabs { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 10px 8px; color: var(--muted); border-bottom: 2px solid transparent; justify-content: center; }
   .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 
   .progress { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
   .round { font-weight: 700; }
-  .steps { display: flex; gap: 5px; align-items: center; }
-  .steps span { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
-  .steps span.done { background: var(--accent); }
-  .steps span.now { background: var(--pick); }
   .hint { color: var(--muted); margin: 0; font-size: 0.9rem; }
   .note { font-size: 0.85rem; color: var(--muted); border-left: 3px solid var(--pick); padding-left: 8px; margin: 0; }
   .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 28px 12px; text-align: center; margin: 0; }
 
+  .grid.thinking { opacity: 0.6; pointer-events: none; }
   .grid { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 4px; }
   .cell { padding: 0; border: 0; border-radius: 3px; overflow: hidden; background: var(--well); outline: 2px solid transparent; outline-offset: 1px; cursor: pointer; }
+  .cell { position: relative; }
   .cell canvas { display: block; width: 100%; height: auto; }
+  .cell.no canvas { opacity: 0.35; }
+  /* 喜歡 / 不喜歡 marks: show on hover (always on touch screens) and whenever set */
+  /* hidden (and not clickable) until the mouse has rested on the thumbnail for a moment */
+  .mark {
+    position: absolute; bottom: 3px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+    justify-content: center; background: rgba(0, 0, 0, 0.55); color: #fff;
+    opacity: 0; visibility: hidden; transition: opacity 0.12s, visibility 0s linear 0.12s;
+  }
+  .mark.like { left: 3px; }
+  .mark.no { right: 3px; }
+  @media (hover: hover) {
+    .cell:hover .mark { opacity: 0.9; visibility: visible; transition: opacity 0.12s 0.5s, visibility 0s 0.5s; }
+  }
+  .cell:focus-visible .mark, .cell .mark:focus-visible { opacity: 0.9; visibility: visible; transition: none; }
+  .cell.like .mark.like, .cell.swipe-like .mark.like { opacity: 1; visibility: visible; background: #e5484d; transition: none; }
+  .cell.no .mark.no, .cell.swipe-no .mark.no { opacity: 1; visibility: visible; background: #1c1e21; transition: none; }
+  /* touch screens: swipe right = 喜歡, swipe left = 不喜歡; the marks only show the result */
+  @media (hover: none) {
+    .cell { touch-action: pan-y; }
+    .mark { pointer-events: none; }
+  }
+  .cell.swiping { transition: none; z-index: 1; }
   .cell.center { outline-color: var(--accent); }
   .cell.picked { outline: 3px solid var(--pick); }
   .cell:focus-visible { outline: 3px solid var(--fg); }
 
   .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .row.end { justify-content: space-between; }
+  /* the four gallery controls share one row and split it evenly */
+  .actions-row { gap: 4px; }
+  .actions-row > * { flex: 1 1 auto; min-width: 0; padding: 6px 4px; font-size: 13px; justify-content: center; white-space: nowrap; }
+  .actions-row select { flex: 0 0 auto; padding: 6px 2px; }
   select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
   label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.9rem; }
 
@@ -159,11 +237,18 @@
   fieldset:disabled { opacity: 0.5; }
   legend { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); padding: 0; margin-bottom: 4px; }
   #sliders { display: flex; flex-direction: column; gap: 14px; }
-  .slider { display: grid; grid-template-columns: 6.2em minmax(0, 1fr) 2.8em; gap: 8px; align-items: center; }
-  .slider label { font-size: 0.9rem; }
-  .slider output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: 0.85rem; }
-  .slider input { width: 100%; accent-color: var(--accent); }
-  .ends { font-size: 0.72rem; color: var(--muted); display: flex; justify-content: space-between; grid-column: 2; margin-top: -6px; }
+  /* name and number keep a fixed width; the slider takes all the extra room when the panel is widened */
+  .slider { display: grid; grid-template-columns: 5.4em minmax(0, 1fr) 3.6em; gap: 10px; align-items: center; }
+  .slider label { font-size: 0.9rem; white-space: nowrap; }
+  .slider input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); }
+  .num {
+    width: 100%; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 0.85rem; text-align: right;
+    padding: 3px 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--fg); cursor: text;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .num::-webkit-inner-spin-button, .num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .num:hover { border-color: var(--line); }
+  .num:focus { outline: none; border-color: var(--accent); background: var(--bg); cursor: ns-resize; }
 
   .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 70%, transparent); border-radius: 8px; font-weight: 500; }
   .error { color: var(--danger); margin: 0; }
@@ -192,19 +277,17 @@
   </header>
 
   <div class="main">
-    <section class="stage" aria-label="照片">
+    <section class="stage panel" data-panel="stage" aria-label="照片">
+      <div class="panel-head stage-head"><span class="grip" title="拖曳來移動位置" aria-hidden="true">⋮⋮</span></div>
       <div class="well" id="well">
-        <div class="dropzone" id="dropzone" role="button" tabindex="0">
-          <strong>點這裡選擇照片</strong>
-          <span>或把電腦裡的照片拖曳到網頁上</span>
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" title="選擇照片" aria-label="選擇照片">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg>
         </div>
         <div class="views single" id="views" hidden>
           <figure id="origFigure" hidden>
-            <figcaption>原圖</figcaption>
             <canvas id="orig" width="10" height="10" aria-label="原圖"></canvas>
           </figure>
           <figure>
-            <figcaption id="stageCaption" hidden>效果</figcaption>
             <canvas id="stage" width="10" height="10" aria-label="照片預覽，點一下切換原圖和效果"></canvas>
           </figure>
         </div>
@@ -223,37 +306,41 @@
         <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
       </div>
       <div class="stage-meta" id="stageMeta" hidden>
-        <span class="chip" id="stageChip"><span class="dot"></span><span id="stageLabel">目前的效果</span></span>
+        <div class="minis" id="minis" role="group" aria-label="切換原圖和效果">
+          <button type="button" class="mini" id="miniOrig" title="原圖" aria-label="原圖"><canvas id="miniOrigCv" width="10" height="10"></canvas></button>
+          <button type="button" class="mini active" id="miniFx" title="效果" aria-label="效果"><canvas id="miniFxCv" width="10" height="10"></canvas></button>
+        </div>
         <div class="meta-right">
           <span class="segmented" role="group" aria-label="顯示方式">
-            <button type="button" id="viewSingle" aria-pressed="true">單張</button>
-            <button type="button" id="viewDual" aria-pressed="false">並排比較</button>
+            <button type="button" id="viewSingle" aria-pressed="true" title="單張" aria-label="單張">
+              <svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true"><rect x="5" y="2" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
+            <button type="button" id="viewDual" aria-pressed="false" title="並排比較" aria-label="並排比較">
+              <svg width="34" height="16" viewBox="0 0 34 16" aria-hidden="true"><rect x="1" y="2" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="17" y1="1" x2="17" y2="15" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/><rect x="21" y="2" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
           </span>
-          <button type="button" id="cropStart">裁切／旋轉</button>
-          <span class="filename" id="filename"></span>
-          <button type="button" class="link" id="replace">更換照片</button>
+          <button type="button" id="cropStart" class="icon" title="裁切／旋轉" aria-label="裁切／旋轉"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></button>
+          <button type="button" id="replace" class="icon" title="更換照片" aria-label="更換照片"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v7M9 12l3-3 3 3"/></svg></button>
         </div>
       </div>
       <div class="croptools" id="cropTools" hidden>
-        <button type="button" id="rotLeft" title="向左轉 90°">⟲ 左轉</button>
-        <button type="button" id="rotRight" title="向右轉 90°">⟳ 右轉</button>
-        <label class="straighten" for="straighten">拉直
-          <input type="range" id="straighten" min="-45" max="45" step="0.1" value="0">
+        <button type="button" id="rotLeft" class="icon" title="向左轉 90°" aria-label="向左轉 90°"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button>
+        <button type="button" id="rotRight" class="icon" title="向右轉 90°" aria-label="向右轉 90°"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>
+        <label class="straighten" for="straighten" title="拉直">
+          <input type="range" id="straighten" min="-45" max="45" step="0.1" value="0" aria-label="拉直">
           <output id="straightenOut" for="straighten">0.0°</output>
         </label>
-        <label class="inline" for="ratio">比例
-          <select id="ratio">
+          <select id="ratio" title="比例" aria-label="比例">
             <option value="free">自由</option>
             <option value="orig">原始比例</option>
             <option value="1">1:1</option>
             <option value="1.3333">4:3</option>
-            <option value="0.75">3:4（直）</option>
+            <option value="0.75">3:4</option>
             <option value="1.5">3:2</option>
-            <option value="0.6667">2:3（直）</option>
+            <option value="0.6667">2:3</option>
             <option value="1.7778">16:9</option>
-            <option value="0.5625">9:16（直）</option>
+            <option value="0.5625">9:16</option>
           </select>
-        </label>
         <div class="actions">
           <button type="button" id="cropReset">重設</button>
           <button type="button" id="cropCancel">取消</button>
@@ -268,37 +355,28 @@
       <button type="button" role="tab" id="tabSliders" aria-selected="false" aria-controls="slidersCard">調整照片</button>
     </div>
 
-    <section class="card" id="galleryCard" aria-label="圖庫挑選">
-      <h2>圖庫挑選</h2>
-      <p class="empty" id="galleryEmpty">選好照片後，這裡會出現 25 張不同效果的小圖。</p>
+    <section class="card panel" id="galleryCard" data-panel="gallery" aria-label="圖庫挑選">
+      <div class="panel-head"><span class="grip" title="拖曳來移動位置" aria-hidden="true">⋮⋮</span></div>
       <div id="galleryBody" hidden>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <div class="progress">
-            <span class="round" id="roundLabel">第 1 輪</span>
-            <span class="steps" id="steps" aria-label="本輪進度"></span>
-          </div>
-          <p class="hint" id="galleryHint"></p>
-          <p class="note" id="restartNote" hidden>你在「調整照片」手動調整過，所以圖庫從調整後的樣子重新開始。</p>
-          <div class="grid" id="grid"></div>
-          <div class="row">
+          <div class="gridbox" id="gridBox"><div class="grid" id="grid"></div></div>
+          <div class="row actions-row">
             <button id="confirm" type="button" class="pick" disabled>確認這張</button>
+            <button id="dislike" type="button">都不喜歡</button>
             <button id="undo" type="button" disabled>上一步</button>
+            <select id="gridSize" aria-label="格子數量">
+              <option value="5">5×5</option>
+              <option value="3">3×3</option>
+            </select>
+            <button id="restart" type="button">刷新圖片</button>
           </div>
-          <div class="row end">
-            <label class="inline" for="gridSize">格子
-              <select id="gridSize">
-                <option value="5">5 × 5</option>
-                <option value="3">3 × 3（格子較大）</option>
-              </select>
-            </label>
-            <button id="restart" type="button">從目前效果重新探索</button>
-          </div>
+          <div class="treewrap" id="treeWrap"><div class="tree" id="tree"></div></div>
         </div>
       </div>
     </section>
 
-    <section class="card" id="slidersCard" aria-label="調整照片">
-      <h2>調整照片</h2>
+    <section class="card panel" id="slidersCard" data-panel="sliders" aria-label="調整照片">
+      <div class="panel-head"><span class="grip" title="拖曳來移動位置" aria-hidden="true">⋮⋮</span></div>
       <div id="sliders"></div>
       <div class="row"><button id="reset" type="button" disabled>重置</button></div>
     </section>
@@ -313,7 +391,8 @@
   </footer>
 </div>
 
-<div class="dropcover" id="dropcover" hidden>放開來使用這張照片</div>
+<div class="dropcover" id="dropcover" hidden></div>
+<div class="dropmark" id="dropmark" hidden></div>
 
 <dialog id="saveDialog">
   <strong>下載好了嗎？</strong>
@@ -329,20 +408,19 @@ const { SequentialPlaneSearch, planePoint } = globalThis.SequentialGallery;
 
 // The 12 design parameters (same as the paper's photo color enhancement). 0 = no change.
 const PARAMS = [
-  { group: "基本", name: "亮度", min: -60, max: 60, ends: ["暗", "亮"] },
-  { group: "基本", name: "對比", min: -50, max: 50, ends: ["柔", "強"] },
-  { group: "基本", name: "飽和度", min: -50, max: 50, ends: ["淡", "濃"] },
-  { group: "暗部色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
-  { group: "暗部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
-  { group: "暗部色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
-  { group: "中間調色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
-  { group: "中間調色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
-  { group: "中間調色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
-  { group: "亮部色彩", name: "青 ↔ 紅", min: -40, max: 40, ends: ["青", "紅"] },
-  { group: "亮部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40, ends: ["洋紅", "綠"] },
-  { group: "亮部色彩", name: "黃 ↔ 藍", min: -40, max: 40, ends: ["黃", "藍"] },
+  { group: "基本", name: "亮度", min: -60, max: 60 },
+  { group: "基本", name: "對比", min: -50, max: 50 },
+  { group: "基本", name: "飽和度", min: -50, max: 50 },
+  { group: "暗部色彩", name: "青 ↔ 紅", min: -40, max: 40 },
+  { group: "暗部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40 },
+  { group: "暗部色彩", name: "黃 ↔ 藍", min: -40, max: 40 },
+  { group: "中間調色彩", name: "青 ↔ 紅", min: -40, max: 40 },
+  { group: "中間調色彩", name: "洋紅 ↔ 綠", min: -40, max: 40 },
+  { group: "中間調色彩", name: "黃 ↔ 藍", min: -40, max: 40 },
+  { group: "亮部色彩", name: "青 ↔ 紅", min: -40, max: 40 },
+  { group: "亮部色彩", name: "洋紅 ↔ 綠", min: -40, max: 40 },
+  { group: "亮部色彩", name: "黃 ↔ 藍", min: -40, max: 40 },
 ];
-const CLICKS_PER_ROUND = 4;
 const STAGE_LONG_SIDE = 1600;
 const THUMB_LONG_SIDE = 220;
 const EXPORT_MAX_PIXELS = 50e6;
@@ -440,6 +518,7 @@ const state = {
   showOriginal: false,          // single view only
   geom: null,                   // crop & rotation applied to the photo
   cropDraft: null,              // geometry being edited while the crop tools are open
+  tree: null,                   // history tree of gallery states
 };
 
 const toX = values => Float64Array.from(values, (v, i) => (v - PARAMS[i].min) / (PARAMS[i].max - PARAMS[i].min));
@@ -464,14 +543,19 @@ function drawStage() {
     $("stage").getContext("2d").putImageData(showOriginal ? state.stageSrc : state.stageOut, 0, 0);
 
     const picking = state.gallery && state.gallery.picked !== null;
-    const what = picking ? "橘框那張（還沒確認）" : "目前的效果";
-    const chip = $("stageChip");
-    chip.classList.toggle("picking", picking && !showOriginal);
-    chip.classList.toggle("original", showOriginal);
-    if (state.view === "dual") $("stageLabel").textContent = `右邊：${what}`;
-    else $("stageLabel").textContent = showOriginal ? "原圖・點圖片回到效果" : `${what}・點圖片看原圖`;
-    $("stageCaption").textContent = picking ? "效果（橘框那張）" : "效果";
+    drawMinis(picking, showOriginal);
   });
+}
+
+// The two small pictures under the photo: original and effect; the one on screen is framed.
+function drawMinis(picking, showOriginal) {
+  const src = state.thumbSrc;
+  for (const id of ["miniOrigCv", "miniFxCv"]) { $(id).width = src.width; $(id).height = src.height; }
+  $("miniOrigCv").getContext("2d").putImageData(src, 0, 0);
+  $("miniFxCv").getContext("2d").putImageData(processImageData(src, stageValues()), 0, 0);
+  $("miniOrig").classList.toggle("active", showOriginal);
+  $("miniFx").classList.toggle("active", !showOriginal);
+  $("miniFx").classList.toggle("picking", picking);
 }
 
 function setView(view) {
@@ -483,17 +567,20 @@ function setView(view) {
   views.classList.toggle("single", view === "single");
   views.classList.toggle("dual", view === "dual");
   $("origFigure").hidden = view !== "dual";
-  $("stageCaption").hidden = view !== "dual";
+  $("minis").hidden = view === "dual";
   drawStage();
 }
 
 // ---------- gallery ----------
 
+// how far the first options spread from the current look (0.5 felt too strong)
+const START_SPREAD = 0.3;
+
 function startGallery() {
-  const sps = new SequentialPlaneSearch(PARAMS.length, toX(state.current));
+  const sps = new SequentialPlaneSearch(PARAMS.length, toX(state.current), START_SPREAD);
   state.gallery = {
-    sps, round: 1, zoom: { s: 0, t: 0, half: 1, clicks: 0 },
-    chosenX: Float64Array.from(sps.plane.c), picked: null, history: [], cells: [], n: 5,
+    sps, reach: START_SPREAD, zoom: { s: 0, t: 0, half: 1 },
+    chosenX: Float64Array.from(sps.plane.c), picked: null, cells: [], n: 5,
   };
   buildGrid();
 }
@@ -501,16 +588,14 @@ function startGallery() {
 function buildGrid() {
   const g = state.gallery;
   const n = Number($("gridSize").value);
-  const { s, t, half } = g.zoom;
   g.n = n;
   g.picked = null;
   g.cells = [];
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
-      const cs = s + half * (2 * c / (n - 1) - 1);
-      const ct = t + half * (1 - 2 * r / (n - 1));
+      const cs = 2 * c / (n - 1) - 1, ct = 1 - 2 * r / (n - 1);
       const x = planePoint(g.sps.plane, cs, ct);
-      g.cells.push({ s: cs, t: ct, x, values: toValues(x), center: r === (n - 1) / 2 && c === (n - 1) / 2 });
+      g.cells.push({ s: cs, t: ct, x, values: toValues(x), mark: null, center: r === (n - 1) / 2 && c === (n - 1) / 2 });
     }
   }
 
@@ -520,20 +605,101 @@ function buildGrid() {
   const src = state.thumbSrc;
   const out = new ImageData(src.width, src.height);
   g.cells.forEach((cell, i) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "cell" + (cell.center ? " center" : "");
-    btn.setAttribute("aria-label", `選項 第 ${Math.floor(i / n) + 1} 列第 ${i % n + 1} 個` + (cell.center ? "（目前確認的）" : ""));
+    const div = document.createElement("div");
+    div.className = "cell" + (cell.center ? " center" : "");
+    div.tabIndex = 0;
+    div.setAttribute("role", "button");
+    div.setAttribute("aria-label", `選項 第 ${Math.floor(i / n) + 1} 列第 ${i % n + 1} 個` + (cell.center ? "（目前確認的）" : ""));
     const cv = document.createElement("canvas");
     cv.width = src.width; cv.height = src.height;
     processImageData(src, cell.values, out);
     cv.getContext("2d").putImageData(out, 0, 0);
-    btn.appendChild(cv);
-    btn.addEventListener("click", () => pick(i));
-    grid.appendChild(btn);
+    div.appendChild(cv);
+    for (const [kind, icon, label] of [["like", ICON_LIKE, "喜歡"], ["no", ICON_NO, "不喜歡"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mark " + kind;
+      b.title = label;
+      b.setAttribute("aria-label", label);
+      b.innerHTML = icon;
+      b.addEventListener("click", e => { e.stopPropagation(); toggleMark(i, kind); });
+      div.appendChild(b);
+    }
+    div.addEventListener("click", () => { if (swallowClick) { swallowClick = false; return; } pick(i); });
+    attachSwipe(div, i);
+    // mouse: double-click = 喜歡, right-click = 不喜歡 (doing it again clears it)
+    div.addEventListener("dblclick", () => { if (lastPointer === "mouse") toggleMark(i, "like"); });
+    div.addEventListener("contextmenu", e => {
+      if (lastPointer !== "mouse") return;
+      e.preventDefault();
+      toggleMark(i, "no");
+    });
+    div.addEventListener("keydown", e => { if (e.target === div && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pick(i); } });
+    grid.appendChild(div);
   });
   updateGalleryUI();
+  fitGrid();
   drawStage();
+}
+
+const ICON_LIKE = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.2 3.3 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.7 0 6 3.7 4.5 7.3C19.5 16.4 12 21 12 21z" fill="currentColor"/></svg>';
+const ICON_NO = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+
+// Touch screens: press a thumbnail and slide right for 喜歡, left for 不喜歡. A short slide does nothing.
+const SWIPE_PX = 36;
+const DOUBLE_TAP_MS = 320;
+let swallowClick = false;
+let lastPointer = "mouse";
+function attachSwipe(div, i) {
+  let start = null, lastTap = 0;
+  div.addEventListener("pointerdown", e => {
+    lastPointer = e.pointerType || "mouse";
+    if (e.pointerType === "mouse") return;
+    start = { x: e.clientX, y: e.clientY, id: e.pointerId, horizontal: false };
+  });
+  div.addEventListener("pointermove", e => {
+    if (!start || e.pointerId !== start.id) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (!start.horizontal) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start = null; return; } // scrolling the page
+      if (Math.abs(dx) < 8) return;
+      start.horizontal = true;
+      try { div.setPointerCapture(e.pointerId); } catch (err) { /* keep going without capture */ }
+      div.classList.add("swiping");
+    }
+    div.style.transform = `translateX(${Math.max(-40, Math.min(40, dx * 0.5))}px)`;
+    div.classList.toggle("swipe-like", dx > SWIPE_PX);
+    div.classList.toggle("swipe-no", dx < -SWIPE_PX);
+  });
+  const end = e => {
+    if (!start || e.pointerId !== start.id) return;
+    const dx = e.clientX - start.x, wasSwipe = start.horizontal;
+    start = null;
+    div.style.transform = "";
+    div.classList.remove("swiping", "swipe-like", "swipe-no");
+    if (!wasSwipe) {
+      // touch: two quick taps = 喜歡 (again clears it)
+      if (e.type !== "pointerup") return;
+      const now = Date.now();
+      if (now - lastTap < DOUBLE_TAP_MS) { lastTap = 0; toggleMark(i, "like"); }
+      else lastTap = now;
+      return;
+    }
+    swallowClick = true; // the slide is not a tap
+    setTimeout(() => { swallowClick = false; }, 400);
+    if (e.type === "pointerup" && Math.abs(dx) > SWIPE_PX) toggleMark(i, dx > 0 ? "like" : "no");
+  };
+  div.addEventListener("pointerup", end);
+  div.addEventListener("pointercancel", end);
+}
+
+// 喜歡 / 不喜歡 on a thumbnail (click again to clear = 沒意見)
+function toggleMark(i, kind) {
+  const cell = state.gallery.cells[i];
+  cell.mark = cell.mark === kind ? null : kind;
+  const el = $("grid").children[i];
+  el.classList.toggle("like", cell.mark === "like");
+  el.classList.toggle("no", cell.mark === "no");
 }
 
 function pick(i) {
@@ -545,61 +711,193 @@ function pick(i) {
   drawStage();
 }
 
+// 確認這張 = 最喜歡. Every confirmation teaches the model and shows a new page; there is no fixed number of steps.
+// The next page is smaller when the pick was the middle (fine-tuning) and a bit larger when it was at the edge.
 function confirmPick() {
   const g = state.gallery;
-  if (!g || g.picked === null) return;
+  if (!g || g.picked === null || g.busy) return;
   const cell = g.cells[g.picked];
-  g.history.push({ model: g.sps.snapshot(), round: g.round, zoom: { ...g.zoom }, chosenX: g.chosenX, current: state.current.slice() });
+  const others = g.cells.filter(c => c !== cell);
+  const liked = others.filter(c => c.mark === "like").map(c => c.x);
+  const disliked = others.filter(c => c.mark === "no").map(c => c.x);
+  const n = g.n, corners = [0, n - 1, n * (n - 1), n * n - 1, (n * n - 1) / 2].map(i => g.cells[i]);
+  const neutral = corners.filter(c => c !== cell && !c.mark).map(c => c.x);
+  const d = Math.max(Math.abs(cell.s), Math.abs(cell.t));
+  g.reach = Math.min(0.6, Math.max(0.04, g.reach * (d === 0 ? 0.6 : d <= 0.5 ? 0.85 : 1.15)));
   g.chosenX = cell.x;
   state.current = cell.values.slice();
   syncSliders();
-  $("restartNote").hidden = true;
-  if (g.zoom.clicks + 1 < CLICKS_PER_ROUND) {
-    g.zoom = { s: cell.s, t: cell.t, half: g.zoom.half / 2, clicks: g.zoom.clicks + 1 };
+  g.busy = true;
+  $("grid").classList.add("thinking");
+  updateGalleryUI();
+  setTimeout(() => {
+    g.sps.submit(cell.x, { liked, disliked, neutral, reach: g.reach });
+    g.busy = false;
+    $("grid").classList.remove("thinking");
     buildGrid();
-  } else {
-    $("confirm").disabled = true;
-    $("undo").disabled = true;
-    $("galleryHint").textContent = "正在根據你的選擇，計算下一輪的方向…";
-    setTimeout(() => {
-      g.sps.submit(cell.x);
-      g.round++;
-      g.zoom = { s: 0, t: 0, half: 1, clicks: 0 };
-      buildGrid();
-    }, 20);
-  }
-}
-
-function undo() {
-  const g = state.gallery;
-  if (!g || g.history.length === 0) return;
-  const prev = g.history.pop();
-  g.sps.restore(prev.model);
-  g.round = prev.round;
-  g.zoom = prev.zoom;
-  g.chosenX = prev.chosenX;
-  state.current = prev.current;
-  syncSliders();
-  buildGrid();
-  $("galleryHint").textContent = "已回到上一步，請重新選擇。";
+    addNode("confirm");
+  }, 20);
 }
 
 function updateGalleryUI() {
   const g = state.gallery;
-  $("roundLabel").textContent = `第 ${g.round} 輪・第 ${g.zoom.clicks + 1}/${CLICKS_PER_ROUND} 次`;
-  const steps = $("steps");
-  steps.textContent = "";
-  for (let i = 0; i < CLICKS_PER_ROUND; i++) {
-    const s = document.createElement("span");
-    if (i < g.zoom.clicks) s.className = "done";
-    else if (i === g.zoom.clicks) s.className = "now";
-    steps.appendChild(s);
-  }
-  $("confirm").disabled = g.picked === null;
-  $("undo").disabled = g.history.length === 0;
-  $("galleryHint").textContent = g.picked === null
-    ? "點一張小圖，大圖會顯示那個效果。藍框是目前確認的效果。"
-    : "大圖正在顯示橘框這張。喜歡就按「確認這張」，不喜歡就點別張。";
+  const busy = !!g.busy;
+  $("confirm").disabled = busy || g.picked === null;
+  $("dislike").disabled = busy;
+  $("restart").disabled = busy;
+  const node = state.tree && state.tree.nodes[state.tree.current];
+  $("undo").disabled = busy || !node || node.parent === null;
+}
+
+// ---------- history tree ----------
+// Every state of the gallery is a numbered node. 確認這張 adds a child (solid line), 刷新圖片 adds a
+// branch (dashed line), 上一步 goes to the parent, and clicking any node goes back to it.
+
+function snapGallery() {
+  const g = state.gallery;
+  return { model: g.sps.snapshot(), reach: g.reach, chosenX: Float64Array.from(g.chosenX), current: state.current.slice() };
+}
+
+function restoreGallery(snap) {
+  const g = state.gallery;
+  g.sps.restore(snap.model);
+  g.reach = snap.reach;
+  g.chosenX = Float64Array.from(snap.chosenX);
+  state.current = snap.current.slice();
+  syncSliders();
+  buildGrid();
+}
+
+function resetTree() {
+  state.tree = { nodes: [{ id: 0, parent: null, kind: "root", step: 0, snap: snapGallery() }], current: 0 };
+  renderTree();
+}
+
+function addNode(kind) {
+  const t = state.tree;
+  const step = t.nodes[t.current].step + (kind === "confirm" ? 1 : 0);
+  t.nodes.push({ id: t.nodes.length, parent: t.current, kind, step, snap: snapGallery() });
+  t.current = t.nodes.length - 1;
+  renderTree();
+}
+
+// How many times in a row 刷新圖片 has been pressed here (this one included).
+function refreshLevel() {
+  const t = state.tree;
+  let k = 1, n = t.nodes[t.current];
+  while (n.kind === "refresh") { k++; n = t.nodes[n.parent]; }
+  k += t.nodes.filter(m => m.parent === t.current && m.kind === "refresh").length;
+  return k;
+}
+
+// New options around the current look. The first refresh is as gentle as the start;
+// pressing it again reaches further each time. What was learned so far is kept.
+function refreshGallery() {
+  const g = state.gallery;
+  if (!g || !state.tree || g.busy) return;
+  const spread = Math.min(0.9, g.reach + 0.12 * (refreshLevel() - 1));
+  g.sps.reseed(toX(state.current), spread);
+  g.reach = spread;
+  g.chosenX = Float64Array.from(g.sps.plane.c);
+  buildGrid();
+  addNode("refresh");
+}
+
+// "None of these": same reach as what is on screen now, new directions, and the model learns
+// that the current choice beats everything shown. Stays on the same step.
+function dislikeAll() {
+  const g = state.gallery;
+  if (!g || !state.tree || g.busy) return;
+  // the corners and edge middles of the grid on screen stand for everything that was shown
+  const n = g.n, edge = [0, (n - 1) / 2, n - 1];
+  const shown = edge.flatMap(r => edge.map(c => g.cells[r * n + c].x)).filter((_, i) => i !== 4);
+  g.sps.dislike(toX(state.current), g.reach, shown);
+  g.chosenX = Float64Array.from(g.sps.plane.c);
+  buildGrid();
+  addNode("dislike");
+}
+
+function updateCurrentNode() {
+  state.tree.nodes[state.tree.current].snap = snapGallery();
+}
+
+function goToNode(id) {
+  const t = state.tree;
+  if (!t.nodes[id]) return;
+  t.current = id;
+  restoreGallery(t.nodes[id].snap);
+  renderTree();
+}
+
+function undo() {
+  const node = state.tree && state.tree.nodes[state.tree.current];
+  if (node && node.parent !== null) goToNode(node.parent);
+}
+
+const NODE = 30, NODE_GAP_X = 18, NODE_GAP_Y = 12;
+
+function renderTree() {
+  const t = state.tree, box = $("tree");
+  if (!t) { box.textContent = ""; return; }
+  const kids = t.nodes.map(() => []);
+  t.nodes.forEach(n => { if (n.parent !== null) kids[n.parent].push(n.id); });
+  const PAD = 10; // room on the left for the refresh brackets
+  const pos = [];
+  let lastRow = 0;
+  const place = (id, row) => {
+    pos[id] = { x: PAD + t.nodes[id].step * (NODE + NODE_GAP_X), y: row * (NODE + NODE_GAP_Y) };
+    const ordered = [...kids[id].filter(k => t.nodes[k].kind === "confirm"), ...kids[id].filter(k => t.nodes[k].kind !== "confirm")];
+    ordered.forEach((k, i) => {
+      if (i === 0 && t.nodes[k].kind === "confirm") place(k, row); // the next step continues on this row
+      else place(k, ++lastRow);                                      // every other branch gets a new row below
+    });
+  };
+  place(0, 0);
+  const W = Math.max(...pos.map(p => p.x)) + NODE, H = Math.max(...pos.map(p => p.y)) + NODE;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  t.nodes.forEach(n => {
+    if (n.parent === null) return;
+    const a = pos[n.parent], b = pos[n.id];
+    const path = document.createElementNS(svgNS, "path");
+    if (n.kind !== "confirm") {
+      // same step: a bracket on the left down to the new set — dashed for 刷新, dotted for 都不喜歡
+      const bx = a.x - 7;
+      path.setAttribute("d", `M${a.x} ${a.y + NODE / 2}H${bx}V${b.y + NODE / 2}H${b.x}`);
+      path.setAttribute("stroke-dasharray", n.kind === "refresh" ? "3 3" : "1 3");
+      if (n.kind === "dislike") path.setAttribute("stroke-linecap", "round");
+    } else {
+      const x1 = a.x + NODE, y1 = a.y + NODE / 2, x2 = b.x, y2 = b.y + NODE / 2, mx = x1 + NODE_GAP_X / 2;
+      path.setAttribute("d", y1 === y2 ? `M${x1} ${y1}H${x2}` : `M${x1} ${y1}H${mx}V${y2}H${x2}`);
+    }
+    svg.appendChild(path);
+  });
+
+  box.textContent = "";
+  box.style.width = W + "px";
+  box.style.height = H + "px";
+  box.appendChild(svg);
+  t.nodes.forEach(n => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "node" + (n.id === t.current ? " current" : "");
+    btn.textContent = n.id + 1;
+    btn.style.left = pos[n.id].x + "px";
+    btn.style.top = pos[n.id].y + "px";
+    btn.setAttribute("aria-label", `節點 ${n.id + 1}`);
+    btn.addEventListener("click", () => goToNode(n.id));
+    box.appendChild(btn);
+  });
+
+  // keep the current node in view inside the tree box
+  const wrap = $("treeWrap"), p = pos[t.current];
+  if (p.x < wrap.scrollLeft) wrap.scrollLeft = p.x;
+  else if (p.x + NODE > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = p.x + NODE - wrap.clientWidth + 8;
+  if (p.y < wrap.scrollTop) wrap.scrollTop = p.y;
+  else if (p.y + NODE > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = p.y + NODE - wrap.clientHeight + 8;
+  updateGalleryUI();
 }
 
 // ---------- sliders ----------
@@ -619,32 +917,54 @@ function buildSliders() {
     }
     const row = document.createElement("div");
     row.className = "slider";
-    row.innerHTML = `<label for="p${i}"></label><input type="range" id="p${i}" min="${p.min}" max="${p.max}" step="1" value="0"><output for="p${i}" id="o${i}">0</output><div class="ends"><span></span><span></span></div>`;
+    row.innerHTML = `<label for="p${i}"></label><input type="range" id="p${i}" min="${p.min}" max="${p.max}" step="1" value="0">` +
+      `<input type="number" class="num" id="n${i}" min="${p.min}" max="${p.max}" step="1" value="0" inputmode="numeric">`;
     row.querySelector("label").textContent = p.name;
-    const [a, b] = row.querySelectorAll(".ends span");
-    a.textContent = p.ends[0]; b.textContent = p.ends[1];
-    const input = row.querySelector("input");
-    input.addEventListener("input", () => {
-      state.current[i] = Number(input.value);
-      $("o" + i).textContent = state.current[i];
-      if (state.gallery) state.gallery.picked = null;
-      state.showOriginal = false;
-      drawStage();
-    });
+    const range = row.querySelector('input[type="range"]'), num = row.querySelector(".num");
+    num.setAttribute("aria-label", `${p.group} ${p.name}`);
+
+    range.addEventListener("input", () => setParam(i, range.value));
     // when the slider is released, the gallery starts again from the new look
-    input.addEventListener("change", restartFromSliders);
+    range.addEventListener("change", restartFromSliders);
+
+    // the number: click to type a value; while it is selected the mouse wheel nudges it by 1
+    num.addEventListener("input", () => { if (num.value.trim() !== "" && !isNaN(num.value)) setParam(i, num.value, { keepTyping: true }); });
+    num.addEventListener("change", () => { setParam(i, num.value === "" ? state.current[i] : num.value); restartFromSliders(); });
+    num.addEventListener("keydown", e => { if (e.key === "Enter") num.blur(); });
+    num.addEventListener("wheel", e => {
+      if (document.activeElement !== num) return;
+      e.preventDefault();
+      setParam(i, state.current[i] + (e.deltaY < 0 ? 1 : -1));
+      clearTimeout(wheelRestart);
+      wheelRestart = setTimeout(restartFromSliders, 500);
+    }, { passive: false });
     fs.appendChild(row);
   });
 }
 
+let wheelRestart = null;
+
+// Sets one of the 12 values from the slider, the number box or the wheel.
+function setParam(i, value, opts = {}) {
+  const p = PARAMS[i];
+  const v = Math.min(p.max, Math.max(p.min, Math.round(Number(value) || 0)));
+  state.current[i] = v;
+  $("p" + i).value = v;
+  if (!opts.keepTyping) $("n" + i).value = v;
+  if (state.gallery) state.gallery.picked = null;
+  state.showOriginal = false;
+  drawStage();
+}
+
+// hand-made changes start a fresh gallery from the new look, kept in the current tree node
 function restartFromSliders() {
   if (!state.thumbSrc) return;
   startGallery();
-  $("restartNote").hidden = false;
+  if (state.tree) updateCurrentNode();
 }
 
 function syncSliders() {
-  state.current.forEach((v, i) => { $("p" + i).value = v; $("o" + i).textContent = v; });
+  state.current.forEach((v, i) => { $("p" + i).value = v; $("n" + i).value = v; });
 }
 
 function showTab(which) {
@@ -734,7 +1054,8 @@ function renderCropView() {
 function sizeCropCanvas() {
   const cv = $("cropCanvas");
   const availW = $("cropView").clientWidth || cv.width;
-  const availH = window.innerHeight * 0.68;
+  const availH = panelEl("stage").classList.contains("sized") && innerWidth >= 1000
+    ? Math.max(80, $("well").clientHeight) : window.innerHeight * 0.68;
   const k = Math.min(1, availW / cv.width, availH / cv.height);
   cv.style.width = Math.round(cv.width * k) + "px";
   cv.style.height = Math.round(cv.height * k) + "px";
@@ -783,7 +1104,7 @@ function onCropPointerDown(e) {
   const mode = e.target.dataset.mode || "move";
   const rect = $("cropCanvas").getBoundingClientRect();
   cropDrag = { mode, x0: e.clientX, y0: e.clientY, start: { ...state.cropDraft.crop }, rect };
-  $("cropBox").setPointerCapture(e.pointerId);
+  try { $("cropBox").setPointerCapture(e.pointerId); } catch (err) { /* keep going without capture */ }
   e.preventDefault();
 }
 
@@ -844,11 +1165,10 @@ function loadBitmap(bitmap, name) {
   state.geom = defaultGeom();
   rebuildSources();
   document.body.classList.remove("no-photo");
-  $("filename").textContent = name;
+  layoutPanels();
   $("dropzone").hidden = true;
   $("views").hidden = false;
   $("stageMeta").hidden = false;
-  $("galleryEmpty").hidden = true;
   $("galleryBody").hidden = false;
   $("download").disabled = false;
   $("reset").disabled = false;
@@ -856,8 +1176,8 @@ function loadBitmap(bitmap, name) {
   state.current = PARAMS.map(() => 0);
   state.showOriginal = false;
   syncSliders();
-  $("restartNote").hidden = true;
   startGallery();
+  resetTree();
 }
 
 async function loadFile(file) {
@@ -947,7 +1267,307 @@ function showError(text) {
 
 // ---------- wiring ----------
 
+// ---------- movable, resizable panels (computer) ----------
+// The layout is a tree: a split lays its children side by side ("row") or top to bottom ("col"),
+// and the leaves are the three panels. Any arrangement can be built, e.g. the photo across the
+// whole top with the gallery and the sliders side by side underneath.
+
+const PANELS = ["stage", "gallery", "sliders"];
+const defaultTree = () => ({
+  type: "split", dir: "row", grow: 1, children: [
+    { type: "panel", name: "stage", grow: 1.6 },
+    { type: "panel", name: "gallery", grow: 1 },
+    { type: "panel", name: "sliders", grow: 0.75 },
+  ],
+});
+const MIN_PANEL_PX = 220;
+const MIN_PANEL_H = 160;
+const ROOT_EDGE = 14; // px band along the outer edge of the work area that means "the whole width/height"
+let layout = loadLayout();
+
+function leaves(node) {
+  return node.type === "panel" ? [node] : node.children.flatMap(leaves);
+}
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("sg-layout3"));
+    const names = saved && saved.tree && leaves(saved.tree).map(l => l.name);
+    if (names && names.length === PANELS.length && PANELS.every(p => names.includes(p))) {
+      saved.height = saved.height || { stage: null, gallery: null, sliders: null };
+      return saved;
+    }
+  } catch (e) { /* no storage here */ }
+  return { tree: defaultTree(), height: { stage: null, gallery: null, sliders: null } };
+}
+
+function saveLayout() {
+  try { localStorage.setItem("sg-layout3", JSON.stringify(layout)); } catch (e) { /* no storage here */ }
+}
+
+const panelEl = name => document.querySelector(`[data-panel="${name}"]`);
+const panelShown = name => !(name === "gallery" && document.body.classList.contains("no-photo"));
+const nodeShown = node => node.type === "panel" ? panelShown(node.name) : node.children.some(nodeShown);
+
+// Removes empty splits, unwraps splits with one child and merges a split into a parent of the same direction.
+function normalize(node) {
+  if (node.type === "panel") return node;
+  let kids = node.children.map(normalize).filter(Boolean);
+  kids = kids.flatMap(k => (k.type === "split" && k.dir === node.dir ? k.children.map(c => ({ ...c, grow: c.grow * k.grow / kidsGrow(k) })) : [k]));
+  if (kids.length === 0) return null;
+  if (kids.length === 1) return { ...kids[0], grow: node.grow };
+  return { ...node, children: kids };
+}
+function kidsGrow(split) { return split.children.reduce((a, c) => a + c.grow, 0) / split.children.length || 1; }
+
+// Builds the page from the tree.
+function layoutPanels() {
+  const main = document.querySelector(".main");
+  const old = main.querySelector(":scope > .split");
+  const build = node => {
+    if (node.type === "panel") {
+      const el = panelEl(node.name);
+      applyHeight(node.name);
+      if (!el.querySelector(":scope > .vsplit")) attachVSplit(node.name);
+      el.style.flexGrow = node.grow;
+      return el;
+    }
+    const div = document.createElement("div");
+    div.className = "split split-" + node.dir;
+    div.style.flexGrow = node.grow;
+    const shown = [];
+    node.children.forEach(child => {
+      const el = build(child);
+      div.appendChild(el);
+      if (child.type === "split") el.hidden = !nodeShown(child);
+      if (nodeShown(child)) shown.push({ el, node: child });
+    });
+    if (node.dir === "row") {
+      shown.slice(0, -1).forEach((a, i) => {
+        const sp = document.createElement("div");
+        sp.className = "splitter";
+        sp.setAttribute("role", "separator");
+        sp.setAttribute("aria-orientation", "vertical");
+        sp.title = "拖曳調整寬度，雙擊恢復";
+        a.el.after(sp);
+        attachSplitter(sp, a, shown[i + 1]);
+      });
+    }
+    return div;
+  };
+  const root = build(layout.tree);
+  main.appendChild(root);
+  if (old && old !== root) old.remove();
+  fitGrid();
+}
+
+function attachSplitter(sp, left, right) {
+  sp.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try { sp.setPointerCapture(e.pointerId); } catch (err) { /* keep going without capture */ }
+    const a = left.el.getBoundingClientRect().width, b = right.el.getBoundingClientRect().width;
+    const total = left.node.grow + right.node.grow;
+    const x0 = e.clientX;
+    sp.classList.add("active");
+    document.body.classList.add("resizing-layout");
+    const move = ev => {
+      const wa = Math.min(a + b - MIN_PANEL_PX, Math.max(MIN_PANEL_PX, a + ev.clientX - x0));
+      left.node.grow = total * wa / (a + b);
+      right.node.grow = total - left.node.grow;
+      left.el.style.flexGrow = left.node.grow;
+      right.el.style.flexGrow = right.node.grow;
+      if (state.cropDraft) sizeCropCanvas();
+    };
+    const up = () => {
+      sp.removeEventListener("pointermove", move);
+      sp.removeEventListener("pointerup", up);
+      sp.removeEventListener("pointercancel", up);
+      sp.classList.remove("active");
+      document.body.classList.remove("resizing-layout");
+      saveLayout();
+    };
+    sp.addEventListener("pointermove", move);
+    sp.addEventListener("pointerup", up);
+    sp.addEventListener("pointercancel", up);
+  });
+  sp.addEventListener("dblclick", () => {
+    left.node.grow = right.node.grow = (left.node.grow + right.node.grow) / 2;
+    layoutPanels();
+    saveLayout();
+  });
+}
+
+function applyHeight(name) {
+  const el = panelEl(name), h = layout.height[name];
+  el.classList.toggle("sized", h != null);
+  if (h != null) el.style.setProperty("--h", h + "px"); else el.style.removeProperty("--h");
+  if (name === "gallery") fitGrid();
+}
+
+// A handle on the bottom edge of a panel: drag to set its height, double-click to fit the content again.
+function attachVSplit(name) {
+  const el = panelEl(name);
+  const handle = document.createElement("div");
+  handle.className = "vsplit";
+  handle.setAttribute("role", "separator");
+  handle.setAttribute("aria-orientation", "horizontal");
+  handle.title = "拖曳調整高度，雙擊恢復";
+  el.appendChild(handle);
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* keep going without capture */ }
+    const h0 = el.getBoundingClientRect().height, y0 = e.clientY;
+    handle.classList.add("active");
+    document.body.classList.add("resizing-rows");
+    const move = ev => {
+      layout.height[name] = Math.round(Math.max(MIN_PANEL_H, h0 + ev.clientY - y0));
+      applyHeight(name);
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      handle.classList.remove("active");
+      document.body.classList.remove("resizing-rows");
+      saveLayout();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  });
+  handle.addEventListener("dblclick", () => {
+    layout.height[name] = null;
+    applyHeight(name);
+    saveLayout();
+  });
+}
+
+// When the gallery has a set height, shrink or grow the thumbnails so the whole grid fits it.
+function fitGrid() {
+  const grid = $("grid"), box = $("gridBox");
+  if (!grid || !box) return;
+  if (layout.height.gallery == null || !state.thumbSrc || !state.gallery || innerWidth < 1000) { grid.style.maxWidth = ""; return; }
+  const n = state.gallery.n, gap = 4;
+  const cellH = (box.clientHeight - gap * (n - 1)) / n;
+  const cellW = cellH * state.thumbSrc.width / state.thumbSrc.height;
+  grid.style.maxWidth = Math.max(60, Math.floor(n * cellW + gap * (n - 1))) + "px";
+}
+
+// keep the photo and the gallery fitted while panels change size
+if (window.ResizeObserver) {
+  new ResizeObserver(() => {
+    panelEl("stage").style.setProperty("--fit-h", Math.max(80, $("well").clientHeight) + "px");
+    if (state.cropDraft) sizeCropCanvas();
+  }).observe($("well"));
+  new ResizeObserver(fitGrid).observe($("gridBox"));
+}
+
+// ----- dragging a panel to a new place -----
+
+// Where a dragged panel would land. Near the outer edge of the whole work area (or above / below it)
+// it takes that whole side; over another panel it goes on that panel's side, or swaps in the middle.
+function dropTarget(x, y, from) {
+  const m = document.querySelector(".main > .split").getBoundingClientRect();
+  if (y < m.top + ROOT_EDGE) return { root: true, zone: "top" };
+  if (y > m.bottom - ROOT_EDGE) return { root: true, zone: "bottom" };
+  if (x < m.left + ROOT_EDGE) return { root: true, zone: "left" };
+  if (x > m.right - ROOT_EDGE) return { root: true, zone: "right" };
+  const under = document.elementFromPoint(x, y);
+  const over = under && under.closest("[data-panel]");
+  if (!over || over === from) return null;
+  const r = over.getBoundingClientRect();
+  const fx = (x - r.left) / r.width, fy = (y - r.top) / r.height;
+  const zone = fx < 0.2 ? "left" : fx > 0.8 ? "right" : fy < 0.3 ? "top" : fy > 0.7 ? "bottom" : "swap";
+  return { el: over, zone };
+}
+
+function showDropMark(t) {
+  const mark = $("dropmark");
+  if (!t) { mark.hidden = true; return; }
+  const r = (t.root ? document.querySelector(".main > .split") : t.el).getBoundingClientRect();
+  let { left, top, width, height } = r;
+  const part = t.root ? 0.35 : 0.5;
+  if (t.zone === "left") width = r.width * part;
+  if (t.zone === "right") { left += r.width * (1 - part); width = r.width * part; }
+  if (t.zone === "top") height = r.height * part;
+  if (t.zone === "bottom") { top += r.height * (1 - part); height = r.height * part; }
+  Object.assign(mark.style, { left: left + "px", top: top + "px", width: width + "px", height: height + "px" });
+  mark.hidden = false;
+}
+
+function findLeaf(node, name, parent = null) {
+  if (node.type === "panel") return node.name === name ? { node, parent } : null;
+  for (const c of node.children) { const f = findLeaf(c, name, node); if (f) return f; }
+  return null;
+}
+
+function removeLeaf(node, name) {
+  if (node.type === "panel") return node.name === name ? null : node;
+  return { ...node, children: node.children.map(c => removeLeaf(c, name)).filter(Boolean) };
+}
+
+function movePanel(fromName, t) {
+  if (t.zone === "swap") {
+    const a = findLeaf(layout.tree, fromName).node, b = findLeaf(layout.tree, t.el.dataset.panel).node;
+    [a.name, b.name] = [b.name, a.name];
+    return;
+  }
+  const dir = t.zone === "left" || t.zone === "right" ? "row" : "col";
+  const before = t.zone === "left" || t.zone === "top";
+  const leaf = { type: "panel", name: fromName, grow: 1 };
+  let tree = normalize(removeLeaf(layout.tree, fromName));
+  if (tree.type === "panel") tree = { type: "split", dir, grow: 1, children: [tree] };
+  if (t.root) {
+    if (tree.dir === dir) tree.children[before ? "unshift" : "push"](leaf);
+    else tree = { type: "split", dir, grow: 1, children: before ? [leaf, { ...tree, grow: 1 }] : [{ ...tree, grow: 1 }, leaf] };
+  } else {
+    const { node: target, parent } = findLeaf(tree, t.el.dataset.panel);
+    leaf.grow = target.grow;
+    if (parent.dir === dir) {
+      const i = parent.children.indexOf(target);
+      parent.children.splice(before ? i : i + 1, 0, leaf);
+    } else {
+      const pair = { type: "split", dir, grow: target.grow, children: before ? [leaf, { ...target, grow: 1 }] : [{ ...target, grow: 1 }, { ...leaf, grow: 1 }] };
+      if (before) pair.children[0].grow = 1;
+      parent.children[parent.children.indexOf(target)] = pair;
+    }
+  }
+  layout.tree = normalize(tree);
+}
+
+document.querySelectorAll(".grip").forEach(grip => {
+  grip.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (err) { /* keep going without capture */ }
+    const from = grip.closest("[data-panel]");
+    let target = null;
+    from.classList.add("moving");
+    document.body.classList.add("dragging-layout");
+    const move = ev => {
+      target = dropTarget(ev.clientX, ev.clientY, from);
+      showDropMark(target);
+    };
+    const up = () => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", up);
+      grip.removeEventListener("pointercancel", up);
+      from.classList.remove("moving");
+      document.body.classList.remove("dragging-layout");
+      showDropMark(null);
+      if (target) {
+        movePanel(from.dataset.panel, target);
+        layoutPanels();
+        saveLayout();
+      }
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+    grip.addEventListener("pointercancel", up);
+  });
+});
+
 document.body.classList.add("no-photo");
+layoutPanels();
 buildSliders();
 showTab("gallery");
 
@@ -978,7 +1598,8 @@ $("tabGallery").addEventListener("click", () => showTab("gallery"));
 $("tabSliders").addEventListener("click", () => showTab("sliders"));
 $("confirm").addEventListener("click", confirmPick);
 $("undo").addEventListener("click", undo);
-$("restart").addEventListener("click", () => { $("restartNote").hidden = true; startGallery(); });
+$("restart").addEventListener("click", refreshGallery);
+$("dislike").addEventListener("click", dislikeAll);
 $("gridSize").addEventListener("change", () => { if (state.gallery) buildGrid(); });
 $("reset").addEventListener("click", () => {
   state.current = PARAMS.map(() => 0);
@@ -1002,6 +1623,8 @@ $("stage").addEventListener("click", () => {
   drawStage();
 });
 $("viewSingle").addEventListener("click", () => setView("single"));
+$("miniOrig").addEventListener("click", () => { state.showOriginal = true; drawStage(); });
+$("miniFx").addEventListener("click", () => { state.showOriginal = false; drawStage(); });
 $("viewDual").addEventListener("click", () => setView("dual"));
 
 // drag a photo from the computer onto anywhere on the page
